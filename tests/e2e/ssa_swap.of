@@ -1,0 +1,32 @@
+// The swap problem in SSA destruction. At the loop header phi(a) takes b and
+// phi(b) takes a; those copies happen simultaneously, so emitting them one
+// after the other leaves both holding the same value. Miscompiled at -O1 until
+// the parallel copy was sequentialized properly.
+// EXPECT-OUTPUT: 12
+// EXPECT-OUTPUT: 21
+// EXPECT-OUTPUT: 12
+// EXPECT-OUTPUT: 21
+// EXPECT-OUTPUT: 231
+// EXPECT-OUTPUT: 312
+// EXPECT-OUTPUT: 123
+fn swapper(int n) -> int {
+    int a = 1;
+    int b = 2;
+    while (n > 0) { int tmp = a; a = b; b = tmp; n = n - 1; }
+    return a * 10 + b;
+}
+fn rotate3(int n) -> int {
+    int a = 1; int b = 2; int c = 3;
+    while (n > 0) { int t = a; a = b; b = c; c = t; n = n - 1; }
+    return a * 100 + b * 10 + c;
+}
+fn main() -> int {
+    print_int(swapper(0));
+    print_int(swapper(1));
+    print_int(swapper(2));
+    print_int(swapper(3));
+    print_int(rotate3(1));
+    print_int(rotate3(2));
+    print_int(rotate3(3));
+    return 0;
+}

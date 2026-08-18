@@ -1,0 +1,19 @@
+// A declaration with no initializer must read the same at every optimization
+// level. Without an explicit zero store, -O0 would read whatever was on the
+// stack while mem2reg would have to invent a value.
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: 7
+fn main() -> int {
+    int i;
+    float f;
+    bool b;
+    print_int(i);
+    print_float(f);
+    print_bool(b);
+    int later;
+    later = 7;
+    print_int(later);
+    return 0;
+}

@@ -1,0 +1,37 @@
+=== exit ===
+0
+=== stdout ===
+module "examples/sum.of" hash=0x58e6b80ffffa7148
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @sum(i64 %n) -> i64 {
+entry:
+  br while.cond.1
+
+while.cond.1:                                   ; preds = entry, while.body.2
+  %t10 = phi i64 [ 0, entry ], [ %t7, while.body.2 ]
+  %t9 = phi i64 [ 0, entry ], [ %t5, while.body.2 ]
+  %t2 = icmp lt i64 %t10, %n
+  condbr %t2, while.body.2, while.end.3
+
+while.body.2:                                   ; preds = while.cond.1
+  %t5 = add i64 %t9, %t10
+  %t7 = add i64 %t10, 1
+  br while.cond.1
+
+while.end.3:                                    ; preds = while.cond.1
+  ret i64 %t9
+}
+
+fn @main() -> i64 {
+entry:
+  %t0 = call i64 @sum(i64 100)
+  call void @print_int(i64 %t0)
+  ret i64 0
+}
+=== stderr ===

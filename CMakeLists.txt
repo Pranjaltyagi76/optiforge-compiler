@@ -115,6 +115,7 @@ add_subdirectory(src/frontend)  # of_frontend — lexer, AST, parser
 add_subdirectory(src/ir)        # of_ir      - value model, CFG, verifier, printers
 add_subdirectory(src/irgen)     # of_irgen   - typed AST -> IR lowering
 add_subdirectory(src/analysis)        # of_analysis - dominators, loops, dataflow
+add_subdirectory(src/transforms)      # of_transforms - SSA construction and destruction
 add_subdirectory(src/backend)         # of_backend - machine IR, codegen, asm printer
 add_subdirectory(src/target/x86_64)   # of_target_x86_64 - Microsoft x64 ABI facts
 add_subdirectory(src/driver)    # optiforge   — the CLI executable

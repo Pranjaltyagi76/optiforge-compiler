@@ -113,6 +113,17 @@ void printInstruction(const Instruction& instruction, std::ostream& out) {
       }
       break;
 
+    case Opcode::Phi: {
+      // Show which predecessor each value arrives from; without it a phi is
+      // unreadable and its incoming edges cannot be checked by eye.
+      out << " " << instruction.type()->name();
+      for (std::size_t i = 0; i < instruction.operandCount(); ++i) {
+        out << (i == 0 ? " " : ", ") << "[ " << operandText(instruction.operand(i))
+            << ", " << instruction.incomingBlock(i)->label() << " ]";
+      }
+      break;
+    }
+
     case Opcode::Call: {
       out << " " << instruction.type()->name() << " @" << instruction.callee()->name() << "(";
       for (std::size_t i = 0; i < instruction.operandCount(); ++i) {

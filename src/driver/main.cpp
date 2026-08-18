@@ -18,7 +18,10 @@
 #include "optiforge/ir/Printer.h"
 #include "optiforge/ir/Verifier.h"
 #include "optiforge/irgen/IRGen.h"
+#include "optiforge/analysis/AnalysisManager.h"
 #include "optiforge/analysis/AnalysisPrinter.h"
+#include "optiforge/analysis/SSAVerifier.h"
+#include "optiforge/transforms/SSA.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/TargetInfo.h"
 #include "optiforge/driver/Toolchain.h"
@@ -93,6 +96,32 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     return ExitCode::InternalError;
   }
 
+  // --- SSA construction ---
+  //
+  // Skipped at -O0, where keeping every local in memory makes the IR map
+  // straightforwardly onto the source (ADR-02).
+  analysis::AnalysisManager analyses;
+  if (opts.optLevel > 0) {
+    transforms::promoteMemoryToRegisters(*module, analyses);
+
+    if (!verifier.verify(*module)) {
+      diags.reportGlobal(DiagSeverity::Error,
+                         "internal compiler error: IR invalid after mem2reg");
+      verifier.printErrors(std::cerr);
+      return ExitCode::InternalError;
+    }
+    const std::vector<std::string> ssaErrors =
+        analysis::verifySSA(*module, analyses);
+    if (!ssaErrors.empty()) {
+      diags.reportGlobal(DiagSeverity::Error,
+                         "internal compiler error: SSA form is invalid");
+      for (const std::string& error : ssaErrors) {
+        std::cerr << "  " << error << "\n";
+      }
+      return ExitCode::InternalError;
+    }
+  }
+
   if (opts.emit == EmitStage::Ir) {
     ir::printModule(*module, std::cout);
     return ExitCode::Success;
@@ -104,6 +133,18 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   if (opts.emit == EmitStage::Analysis) {
     analysis::printAnalyses(*module, std::cout);
     return ExitCode::Success;
+  }
+
+  // --- SSA destruction ---
+  //
+  // Runs last, immediately before code generation: it deliberately produces IR
+  // that is no longer in SSA form, so nothing downstream may assume otherwise.
+  transforms::destroySSA(*module);
+  if (!verifier.verify(*module)) {
+    diags.reportGlobal(DiagSeverity::Error,
+                       "internal compiler error: IR invalid after SSA destruction");
+    verifier.printErrors(std::cerr);
+    return ExitCode::InternalError;
   }
 
   // --- Code generation ---

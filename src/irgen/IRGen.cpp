@@ -228,6 +228,23 @@ void IRGen::lowerVarDecl(const VarDeclStmt& decl) {
     if (value != nullptr) {
       builder_->createStore(value, slot);
     }
+  } else {
+    // A declaration with no initializer still gets an explicit zero.
+    //
+    // Reading it would otherwise pick up whatever was on the stack at -O0, but
+    // mem2reg has no stored value to find and would have to invent one --
+    // giving different results at different optimization levels. That would
+    // silently break the differential suite (QA-05), which is the project's
+    // highest-value test category. mem2reg removes this store again anyway.
+    ir::Value* zero = nullptr;
+    if (type->isF64()) {
+      zero = module_->getFloat(0.0);
+    } else if (type->isI1()) {
+      zero = module_->getBool(false);
+    } else {
+      zero = module_->getInt(0);
+    }
+    builder_->createStore(zero, slot);
   }
 }
 

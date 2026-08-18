@@ -142,10 +142,33 @@ void CodeGen::assignSlots(const ir::Function& function) {
         maxCallArgs = std::max(maxCallArgs, instruction->operandCount());
       }
       // An alloca's slot holds the storage; every other result's slot holds
-      // the value itself.
+      // the value itself. Values coalesced onto another value's slot are
+      // handled in a second pass, once their root has an address.
+      // A value aliased onto *another* value's slot is handled below. A value
+      // aliased to itself is the coalescing root and needs a real slot.
+      if (instruction->slotAlias() != nullptr &&
+          instruction->slotAlias() != instruction.get()) {
+        continue;
+      }
       if (instruction->opcode() == Opcode::Alloca || instruction->hasResult()) {
         offset += 8;
         slots_[instruction.get()] = -offset;
+      }
+    }
+  }
+
+  // Second pass: coalesced values share their root's slot. This is what makes
+  // SSA destruction work -- the copies on every incoming edge of a phi all
+  // write the one location the phi's users read.
+  for (const auto& block : function.blocks()) {
+    for (const auto& instruction : block->instructions()) {
+      const ir::Instruction* root = instruction->slotAlias();
+      if (root == nullptr || root == instruction.get()) {
+        continue;
+      }
+      const auto it = slots_.find(root);
+      if (it != slots_.end()) {
+        slots_[instruction.get()] = it->second;
       }
     }
   }
@@ -444,6 +467,27 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::Alloca:
       // The slot itself is the storage; nothing to emit.
       break;
+
+    case Opcode::Copy: {
+      // Produced by SSA destruction. Coalescing means source and destination
+      // frequently share a slot, in which case the value is already where it
+      // belongs and the move would be pure waste.
+      std::int32_t source = 0;
+      std::int32_t destination = 0;
+      if (slotOf(instruction.operand(0), source) && slotOf(&instruction, destination) &&
+          source == destination) {
+        break;
+      }
+      const bool isFloat = instruction.type()->isF64();
+      const MReg reg = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
+      if (isFloat) {
+        loadFloat(instruction.operand(0), reg);
+      } else {
+        loadInt(instruction.operand(0), reg);
+      }
+      storeResult(instruction, reg);
+      break;
+    }
 
     case Opcode::Load: {
       const bool isFloat = instruction.type()->isF64();

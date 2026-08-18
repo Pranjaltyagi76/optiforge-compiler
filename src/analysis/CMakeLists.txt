@@ -2,7 +2,8 @@ add_library(of_analysis STATIC
   Dominators.cpp
   LoopInfo.cpp
   Liveness.cpp
-  AnalysisPrinter.cpp)
+  AnalysisPrinter.cpp
+  SSAVerifier.cpp)
 
 # Analyses read the IR and never mutate it (architectural_design.md section 3,
 # rule 4). The one mutation that lives here, insertLoopPreheaders, is named and

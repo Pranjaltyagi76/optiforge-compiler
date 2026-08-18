@@ -44,6 +44,18 @@ public:
   /// later still have to place their slots here.
   Instruction* insertBeforeTerminator(std::unique_ptr<Instruction> instruction);
 
+  /// Inserts at the very start. Phi nodes must lead a block, which is what
+  /// mem2reg needs when placing them.
+  Instruction* insertAtTop(std::unique_ptr<Instruction> instruction);
+
+  /// Inserts immediately after the last phi, which is the first position a
+  /// non-phi instruction may legally occupy.
+  Instruction* insertAfterPhis(std::unique_ptr<Instruction> instruction);
+
+  /// Removes and destroys `instruction`, dropping its operand references first
+  /// so no value is left listing it as a user.
+  void erase(Instruction* instruction);
+
   /// Last instruction if it is a terminator, else null. A null result means the
   /// block is still open (during construction) or malformed (after).
   Instruction* terminator() const;

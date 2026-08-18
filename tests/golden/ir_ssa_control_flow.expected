@@ -1,0 +1,102 @@
+=== exit ===
+0
+=== stdout ===
+module "tests/golden/inputs/control_flow.of" hash=0x6abe87b22f9ebff
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @classify(i64 %n) -> i64 {
+entry:
+  %t1 = icmp gt i64 %n, 10
+  condbr %t1, if.then.1, if.else.2
+
+if.then.1:                                      ; preds = entry
+  ret i64 2
+
+if.else.2:                                      ; preds = entry
+  %t3 = icmp gt i64 %n, 0
+  condbr %t3, if.then.4, if.else.5
+
+if.then.4:                                      ; preds = if.else.2
+  ret i64 1
+
+if.else.5:                                      ; preds = if.else.2
+  ret i64 0
+}
+
+fn @accumulate(i64 %n) -> i64 {
+entry:
+  br while.cond.1
+
+while.cond.1:                                   ; preds = entry, if.end.5
+  %t16 = phi i64 [ 0, entry ], [ %t15, if.end.5 ]
+  %t14 = phi i64 [ 0, entry ], [ %t9, if.end.5 ]
+  %t13 = phi i64 [ %n, entry ], [ %t11, if.end.5 ]
+  %t1 = icmp gt i64 %t13, 0
+  condbr %t1, while.body.2, while.end.3
+
+while.body.2:                                   ; preds = while.cond.1
+  %t4 = icmp gt i64 %t13, 5
+  condbr %t4, if.then.4, if.end.5
+
+while.end.3:                                    ; preds = while.cond.1
+  ret i64 %t14
+
+if.then.4:                                      ; preds = while.body.2
+  %t6 = add i64 %t13, 1
+  br if.end.5
+
+if.end.5:                                       ; preds = while.body.2, if.then.4
+  %t15 = phi i64 [ %t13, while.body.2 ], [ %t6, if.then.4 ]
+  %t9 = add i64 %t14, %t15
+  %t11 = sub i64 %t13, 1
+  br while.cond.1
+}
+
+fn @logic(i64 %a, i64 %b) -> i1 {
+entry:
+  %t1 = icmp gt i64 %a, 0
+  condbr %t1, and.rhs.1, and.end.2
+
+and.rhs.1:                                      ; preds = entry
+  %t3 = icmp gt i64 %b, 0
+  br and.end.2
+
+and.end.2:                                      ; preds = entry, and.rhs.1
+  %t10 = phi i1 [ %t1, entry ], [ %t3, and.rhs.1 ]
+  condbr %t10, or.end.4, or.rhs.3
+
+or.rhs.3:                                       ; preds = and.end.2
+  %t7 = icmp eq i64 %a, %b
+  br or.end.4
+
+or.end.4:                                       ; preds = and.end.2, or.rhs.3
+  %t9 = phi i1 [ %t10, and.end.2 ], [ %t7, or.rhs.3 ]
+  ret i1 %t9
+}
+
+fn @widen(i64 %i, f64 %g) -> f64 {
+entry:
+  %t1 = sitofp i64 %i
+  %t3 = fmul f64 %t1, 2
+  %t5 = fadd f64 %t3, %g
+  ret f64 %t5
+}
+
+fn @main() -> i64 {
+entry:
+  %t0 = call i64 @classify(i64 5)
+  call void @print_int(i64 %t0)
+  %t1 = call i64 @accumulate(i64 7)
+  call void @print_int(i64 %t1)
+  %t2 = call i1 @logic(i64 1, i64 2)
+  call void @print_bool(i1 %t2)
+  %t3 = call f64 @widen(i64 3, f64 1.5)
+  call void @print_float(f64 %t3)
+  ret i64 0
+}
+=== stderr ===

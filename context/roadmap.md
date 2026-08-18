@@ -166,11 +166,13 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 6 — SSA Form
 **Goal:** IR in SSA so optimizations become simple and precise.
 
-- [ ] `mem2reg`: promote non-address-taken `Alloca`s to SSA registers.
-- [ ] Phi insertion using dominance frontiers (Cytron et al.).
-- [ ] Variable renaming via a dominator-tree walk.
-- [ ] SSA verifier: single definition per value, all uses dominated by their definition, phi arity matches predecessor count.
-- [ ] SSA destruction before register allocation (phi → parallel copies, with the lost-copy and swap problems handled).
+- [x] `mem2reg`: promote non-address-taken `Alloca`s to SSA registers.
+- [x] Phi insertion using dominance frontiers (Cytron et al.).
+- [x] Variable renaming via a dominator-tree walk.
+- [x] SSA verifier: single definition per value, all uses dominated by their definition, phi arity matches predecessor count.
+- [x] SSA destruction before register allocation (phi → parallel copies, with the lost-copy and swap problems handled).
+
+**Status: COMPLETE** (verified: 296 unit assertions, 30 golden cases, 10 end-to-end programs run at -O0/-O1/-O2 with byte-identical output -- which is the SSA round-trip test; clean -Werror build in Debug and Release. The swap problem is covered by a dedicated end-to-end regression.)
 
 **Exit criteria:** All examples round-trip through SSA construction → destruction → codegen with identical program output. The verifier passes on every function.
 

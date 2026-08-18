@@ -59,6 +59,20 @@ public:
   /// instruction is destroyed so no dangling user pointers survive it.
   void dropAllReferences();
 
+  /// Removes this instruction from its block and destroys it. Nothing may
+  /// touch the instruction afterwards.
+  void eraseFromParent();
+
+  // --- Phi incoming edges ---
+  //
+  // A phi's operand i arrives from predecessor i. Stored in the same vector as
+  // terminator successors because an instruction is never both a phi and a
+  // terminator; the accessors below are the ones to use for phis, and the
+  // verifier checks that the arity matches the block's predecessor count.
+  void addIncoming(Value* value, BasicBlock* from);
+  BasicBlock* incomingBlock(std::size_t index) const { return successors_[index]; }
+  std::size_t incomingCount() const { return successors_.size(); }
+
   // --- Terminator successors ---
   const std::vector<BasicBlock*>& successors() const { return successors_; }
   void addSuccessor(BasicBlock* block) { successors_.push_back(block); }
@@ -72,6 +86,18 @@ public:
   Function* callee() const { return callee_; }
   void setCallee(Function* callee) { callee_ = callee; }
 
+  // --- Storage coalescing ---
+  //
+  // Values that must occupy the *same* location. SSA destruction turns one phi
+  // into several copies, one per incoming edge, and every one of them has to
+  // write where the phi's users will read. Naming them alike is not enough:
+  // the backend allocates per instruction, so without this they would each get
+  // their own slot and the phi's meaning would be lost.
+  //
+  // Null means "give this value its own location", which is the normal case.
+  Instruction* slotAlias() const { return slotAlias_; }
+  void setSlotAlias(Instruction* root) { slotAlias_ = root; }
+
   // --- Alloca: the type of the slot, not of the produced address ---
   const Type* allocatedType() const { return allocatedType_; }
   void setAllocatedType(const Type* type) { allocatedType_ = type; }
@@ -84,6 +110,7 @@ private:
   Predicate predicate_ = Predicate::Eq;
   Function* callee_ = nullptr;
   const Type* allocatedType_ = nullptr;
+  Instruction* slotAlias_ = nullptr;
 };
 
 }  // namespace optiforge::ir

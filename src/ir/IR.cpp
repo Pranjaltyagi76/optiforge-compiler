@@ -171,6 +171,17 @@ void Instruction::setOperand(std::size_t index, Value* value) {
   }
 }
 
+void Instruction::eraseFromParent() {
+  if (parent_ != nullptr) {
+    parent_->erase(this);  // destroys *this
+  }
+}
+
+void Instruction::addIncoming(Value* value, BasicBlock* from) {
+  addOperand(value);
+  successors_.push_back(from);
+}
+
 void Instruction::dropAllReferences() {
   for (Value*& operand : operands_) {
     if (operand != nullptr) {
@@ -209,6 +220,37 @@ Instruction* BasicBlock::insertBeforeTerminator(std::unique_ptr<Instruction> ins
     insts_.push_back(std::move(instruction));
   }
   return raw;
+}
+
+Instruction* BasicBlock::insertAtTop(std::unique_ptr<Instruction> instruction) {
+  Instruction* raw = instruction.get();
+  raw->setParent(this);
+  insts_.insert(insts_.begin(), std::move(instruction));
+  return raw;
+}
+
+Instruction* BasicBlock::insertAfterPhis(std::unique_ptr<Instruction> instruction) {
+  Instruction* raw = instruction.get();
+  raw->setParent(this);
+  std::size_t position = 0;
+  while (position < insts_.size() && insts_[position]->opcode() == Opcode::Phi) {
+    ++position;
+  }
+  insts_.insert(insts_.begin() + static_cast<std::ptrdiff_t>(position),
+                std::move(instruction));
+  return raw;
+}
+
+void BasicBlock::erase(Instruction* instruction) {
+  // Drop operand references before destruction so no surviving value keeps
+  // this instruction in its user list.
+  instruction->dropAllReferences();
+  for (auto it = insts_.begin(); it != insts_.end(); ++it) {
+    if (it->get() == instruction) {
+      insts_.erase(it);
+      return;
+    }
+  }
 }
 
 Instruction* BasicBlock::terminator() const {
