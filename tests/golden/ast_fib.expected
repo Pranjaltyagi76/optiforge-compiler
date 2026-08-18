@@ -7,29 +7,29 @@ Program
     Block
       IfStmt
         cond:
-          BinaryExpr '<'
-            VarRef 'n'
-            IntLiteral 2
+          BinaryExpr '<' : bool
+            VarRef 'n' : int
+            IntLiteral 2 : int
         then:
           Block
             ReturnStmt
-              VarRef 'n'
+              VarRef 'n' : int
       ReturnStmt
-        BinaryExpr '+'
-          CallExpr 'fib'
-            BinaryExpr '-'
-              VarRef 'n'
-              IntLiteral 1
-          CallExpr 'fib'
-            BinaryExpr '-'
-              VarRef 'n'
-              IntLiteral 2
+        BinaryExpr '+' : int
+          CallExpr 'fib' : int
+            BinaryExpr '-' : int
+              VarRef 'n' : int
+              IntLiteral 1 : int
+          CallExpr 'fib' : int
+            BinaryExpr '-' : int
+              VarRef 'n' : int
+              IntLiteral 2 : int
   FunctionDecl 'main' -> int
     Block
       ExprStmt
-        CallExpr 'print_int'
-          CallExpr 'fib'
-            IntLiteral 30
+        CallExpr 'print_int' : void
+          CallExpr 'fib' : int
+            IntLiteral 30 : int
       ReturnStmt
-        IntLiteral 0
+        IntLiteral 0 : int
 === stderr ===

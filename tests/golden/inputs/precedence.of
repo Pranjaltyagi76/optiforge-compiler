@@ -4,3 +4,7 @@ fn t() -> bool {
     int c = -a + -(3 * 2);
     return b;
 }
+
+fn main() -> int {
+    return 0;
+}

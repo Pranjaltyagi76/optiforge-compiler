@@ -2,6 +2,9 @@ add_library(of_frontend STATIC
   Token.cpp
   Lexer.cpp
   AST.cpp
+  Type.cpp
+  Symbol.cpp
+  Sema.cpp
   ASTPrinter.cpp
   Parser.cpp)
 

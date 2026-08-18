@@ -1,0 +1,11 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/shadow.of:4:13: error: declaration of 'b' shadows an outer declaration
+        int b = 2;
+            ^
+tests/golden/inputs/shadow.of:2:9: note: previous declaration is here
+    int b = 1;
+        ^
+1 error generated.

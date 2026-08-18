@@ -3,7 +3,8 @@ add_executable(of_unit_tests
   unit/TestMain.cpp
   unit/test_support.cpp
   unit/test_lexer.cpp
-  unit/test_parser.cpp)
+  unit/test_parser.cpp
+  unit/test_sema.cpp)
 target_link_libraries(of_unit_tests PRIVATE of_frontend of_support optiforge_options)
 target_include_directories(of_unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unit")
 

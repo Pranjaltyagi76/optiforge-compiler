@@ -1,0 +1,47 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/sema_errors.of:6:13: error: cannot initialize a variable of type 'int' with a value of type 'float'
+    int x = 3.14;
+            ^~~~
+tests/golden/inputs/sema_errors.of:8:14: error: cannot initialize a variable of type 'bool' with a value of type 'int'
+    bool b = 1;
+             ^
+tests/golden/inputs/sema_errors.of:9:13: error: invalid operands to binary operator '+' ('int' and 'bool')
+    int y = x + b;
+            ^~~~~
+tests/golden/inputs/sema_errors.of:10:13: error: operator '%' requires integer operands, but the operands have types 'float' and 'int'
+    int m = 1.5 % 2;
+            ^~~~~~~
+tests/golden/inputs/sema_errors.of:11:9: error: condition of 'if' must have type 'bool', but has type 'int'
+    if (x) { }
+        ^
+tests/golden/inputs/sema_errors.of:11:9: note: there is no implicit conversion to 'bool'; write an explicit comparison such as '!= 0'
+    if (x) { }
+        ^
+tests/golden/inputs/sema_errors.of:12:9: error: cannot assign a value of type 'float' to variable 'y' of type 'int'
+    y = 2.5;
+        ^~~
+tests/golden/inputs/sema_errors.of:13:5: error: use of undeclared variable 'undefined_var'
+    undefined_var = 1;
+    ^~~~~~~~~~~~~
+tests/golden/inputs/sema_errors.of:14:13: error: use of undeclared function 'unknown_fn'
+    int z = unknown_fn(1);
+            ^~~~~~~~~~~~~
+tests/golden/inputs/sema_errors.of:15:5: error: function 'takes_two' expects 2 arguments, but 1 was provided
+    takes_two(1);
+    ^~~~~~~~~~~~
+tests/golden/inputs/sema_errors.of:16:18: error: cannot pass a value of type 'bool' as parameter 'b' of type 'int'
+    takes_two(1, true);
+                 ^~~~
+tests/golden/inputs/sema_errors.of:23:13: warning: declaration of 'v' shadows an outer declaration
+        int v = 2;
+            ^
+tests/golden/inputs/sema_errors.of:21:9: note: previous declaration is here
+    int v = 1;
+        ^
+tests/golden/inputs/sema_errors.of:28:4: error: not all control paths in function 'no_return_on_all_paths' return a value
+fn no_return_on_all_paths() -> int {
+   ^~~~~~~~~~~~~~~~~~~~~~
+1 warning and 11 errors generated.

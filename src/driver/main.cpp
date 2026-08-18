@@ -9,6 +9,8 @@
 #include "optiforge/frontend/ASTPrinter.h"
 #include "optiforge/frontend/Lexer.h"
 #include "optiforge/frontend/Parser.h"
+#include "optiforge/frontend/Sema.h"
+#include "optiforge/frontend/Symbol.h"
 #include "optiforge/frontend/Token.h"
 #include "optiforge/support/Diagnostic.h"
 #include "optiforge/support/SourceManager.h"
@@ -54,6 +56,20 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   const std::unique_ptr<Program> program = parser.parseProgram();
 
   if (parser.hadError()) {
+    return ExitCode::CompileError;
+  }
+
+  // --- Semantic analysis ---
+  // The symbol table must outlive this scope's use of the AST: nodes hold raw
+  // pointers to symbols it owns.
+  SymbolTable symbols;
+  Sema sema(diags, symbols);
+  sema.analyze(*program);
+
+  // Consult the engine rather than the pass's own flag: -Werror promotion
+  // happens inside DiagnosticEngine, so a pass that reported only warnings
+  // still believes it succeeded.
+  if (diags.hadError()) {
     return ExitCode::CompileError;
   }
 
@@ -106,7 +122,15 @@ int main(int argc, char** argv) {
   DiagnosticEngine diags(sources, std::cerr);
   diags.setWarningsAsErrors(opts.warningsAsErrors);
 
-  const ExitCode result = runCompilation(opts, sources, diags);
+  ExitCode result = runCompilation(opts, sources, diags);
   diags.printSummary();
+
+  // Final backstop. The DiagnosticEngine is the single authority on whether
+  // compilation failed (architectural_design.md 7.1); a stage that returns
+  // Success while the engine holds an error -- a warning promoted by -Werror,
+  // for instance -- must not produce a zero exit status (CLI-09).
+  if (result == ExitCode::Success && diags.hadError()) {
+    result = ExitCode::CompileError;
+  }
   return toInt(result);
 }

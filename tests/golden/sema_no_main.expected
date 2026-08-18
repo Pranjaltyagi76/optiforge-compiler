@@ -1,0 +1,8 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/no_main.of:1:1: error: program has no 'main' function
+fn helper() -> int {
+^
+1 error generated.

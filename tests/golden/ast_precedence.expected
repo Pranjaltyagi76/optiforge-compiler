@@ -5,36 +5,40 @@ Program
   FunctionDecl 't' -> bool
     Block
       VarDeclStmt 'a' : int
-        BinaryExpr '-'
-          BinaryExpr '+'
-            IntLiteral 1
-            BinaryExpr '*'
-              IntLiteral 2
-              IntLiteral 3
-          BinaryExpr '%'
-            BinaryExpr '/'
-              IntLiteral 4
-              IntLiteral 2
-            IntLiteral 3
+        BinaryExpr '-' : int
+          BinaryExpr '+' : int
+            IntLiteral 1 : int
+            BinaryExpr '*' : int
+              IntLiteral 2 : int
+              IntLiteral 3 : int
+          BinaryExpr '%' : int
+            BinaryExpr '/' : int
+              IntLiteral 4 : int
+              IntLiteral 2 : int
+            IntLiteral 3 : int
       VarDeclStmt 'b' : bool
-        BinaryExpr '||'
-          BinaryExpr '&&'
-            BinaryExpr '<'
-              IntLiteral 1
-              IntLiteral 2
-            BinaryExpr '=='
-              IntLiteral 3
-              IntLiteral 4
-          UnaryExpr '!'
-            BoolLiteral false
+        BinaryExpr '||' : bool
+          BinaryExpr '&&' : bool
+            BinaryExpr '<' : bool
+              IntLiteral 1 : int
+              IntLiteral 2 : int
+            BinaryExpr '==' : bool
+              IntLiteral 3 : int
+              IntLiteral 4 : int
+          UnaryExpr '!' : bool
+            BoolLiteral false : bool
       VarDeclStmt 'c' : int
-        BinaryExpr '+'
-          UnaryExpr '-'
-            VarRef 'a'
-          UnaryExpr '-'
-            BinaryExpr '*'
-              IntLiteral 3
-              IntLiteral 2
+        BinaryExpr '+' : int
+          UnaryExpr '-' : int
+            VarRef 'a' : int
+          UnaryExpr '-' : int
+            BinaryExpr '*' : int
+              IntLiteral 3 : int
+              IntLiteral 2 : int
       ReturnStmt
-        VarRef 'b'
+        VarRef 'b' : bool
+  FunctionDecl 'main' -> int
+    Block
+      ReturnStmt
+        IntLiteral 0 : int
 === stderr ===

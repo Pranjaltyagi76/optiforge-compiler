@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string>
 
+#include "optiforge/frontend/Type.h"
+
 namespace optiforge {
 
 namespace {
@@ -162,40 +164,47 @@ private:
     }
   }
 
+  /// Suffix showing the resolved type. Empty before semantic analysis, so a
+  /// pre-sema dump is unchanged and a post-sema dump is self-describing.
+  static std::string typeSuffix(const Expr& expr) {
+    return expr.type() != nullptr ? " : " + std::string(expr.type()->name()) : std::string();
+  }
+
   void writeExpr(const Expr* expr) {
     if (expr == nullptr) {
       line("<null-expr>");
       return;
     }
+    const std::string suffix = typeSuffix(*expr);
 
     switch (expr->kind()) {
       case Node::Kind::IntLiteralExpr: {
         const auto* lit = static_cast<const IntLiteralExpr*>(expr);
-        line("IntLiteral " + std::to_string(lit->value()));
+        line("IntLiteral " + std::to_string(lit->value()) + suffix);
         break;
       }
 
       case Node::Kind::FloatLiteralExpr: {
         const auto* lit = static_cast<const FloatLiteralExpr*>(expr);
-        line("FloatLiteral " + formatDouble(lit->value()));
+        line("FloatLiteral " + formatDouble(lit->value()) + suffix);
         break;
       }
 
       case Node::Kind::BoolLiteralExpr: {
         const auto* lit = static_cast<const BoolLiteralExpr*>(expr);
-        line(lit->value() ? "BoolLiteral true" : "BoolLiteral false");
+        line((lit->value() ? "BoolLiteral true" : "BoolLiteral false") + suffix);
         break;
       }
 
       case Node::Kind::VarRefExpr: {
         const auto* ref = static_cast<const VarRefExpr*>(expr);
-        line("VarRef '" + ref->name() + "'");
+        line("VarRef '" + ref->name() + "'" + suffix);
         break;
       }
 
       case Node::Kind::UnaryExpr: {
         const auto* unary = static_cast<const UnaryExpr*>(expr);
-        line(std::string("UnaryExpr '") + std::string(toString(unary->op())) + "'");
+        line(std::string("UnaryExpr '") + std::string(toString(unary->op())) + "'" + suffix);
         ++depth_;
         writeExpr(unary->operand());
         --depth_;
@@ -204,7 +213,7 @@ private:
 
       case Node::Kind::BinaryExpr: {
         const auto* binary = static_cast<const BinaryExpr*>(expr);
-        line(std::string("BinaryExpr '") + std::string(toString(binary->op())) + "'");
+        line(std::string("BinaryExpr '") + std::string(toString(binary->op())) + "'" + suffix);
         ++depth_;
         writeExpr(binary->lhs());
         writeExpr(binary->rhs());
@@ -214,7 +223,7 @@ private:
 
       case Node::Kind::CallExpr: {
         const auto* call = static_cast<const CallExpr*>(expr);
-        line("CallExpr '" + call->callee() + "'");
+        line("CallExpr '" + call->callee() + "'" + suffix);
         ++depth_;
         for (const ExprPtr& arg : call->args()) {
           writeExpr(arg.get());

@@ -6,32 +6,32 @@ Program
     ParamDecl 'n' : int
     Block
       VarDeclStmt 'total' : int
-        IntLiteral 0
+        IntLiteral 0 : int
       VarDeclStmt 'i' : int
-        IntLiteral 0
+        IntLiteral 0 : int
       WhileStmt
         cond:
-          BinaryExpr '<'
-            VarRef 'i'
-            VarRef 'n'
+          BinaryExpr '<' : bool
+            VarRef 'i' : int
+            VarRef 'n' : int
         body:
           Block
             AssignStmt 'total'
-              BinaryExpr '+'
-                VarRef 'total'
-                VarRef 'i'
+              BinaryExpr '+' : int
+                VarRef 'total' : int
+                VarRef 'i' : int
             AssignStmt 'i'
-              BinaryExpr '+'
-                VarRef 'i'
-                IntLiteral 1
+              BinaryExpr '+' : int
+                VarRef 'i' : int
+                IntLiteral 1 : int
       ReturnStmt
-        VarRef 'total'
+        VarRef 'total' : int
   FunctionDecl 'main' -> int
     Block
       ExprStmt
-        CallExpr 'print_int'
-          CallExpr 'sum'
-            IntLiteral 100
+        CallExpr 'print_int' : void
+          CallExpr 'sum' : int
+            IntLiteral 100 : int
       ReturnStmt
-        IntLiteral 0
+        IntLiteral 0 : int
 === stderr ===

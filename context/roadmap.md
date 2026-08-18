@@ -97,12 +97,14 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 2 — Semantic Analysis
 **Goal:** AST → Typed AST, with all static errors caught.
 
-- [ ] Scoped symbol table (stack of hash maps, or a scope tree).
-- [ ] Two-pass over functions so forward references and mutual recursion work.
-- [ ] Checks: undeclared variable, duplicate declaration, use-before-declaration, type mismatch in assignment/binop/condition, wrong argument count, wrong argument types, wrong or missing return type, calling an undeclared function, `void` misuse.
-- [ ] Implicit conversion rules (decide and document: `int` → `float` yes, everything else explicit or an error).
-- [ ] Annotate every expression node with a resolved `Type*`; annotate every identifier with its `Symbol*`.
-- [ ] `--emit=ast` shows types after this phase.
+- [x] Scoped symbol table (stack of hash maps, or a scope tree).
+- [x] Two-pass over functions so forward references and mutual recursion work.
+- [x] Checks: undeclared variable, duplicate declaration, use-before-declaration, type mismatch in assignment/binop/condition, wrong argument count, wrong argument types, wrong or missing return type, calling an undeclared function, `void` misuse.
+- [x] Implicit conversion rules (decide and document: `int` → `float` yes, everything else explicit or an error).
+- [x] Annotate every expression node with a resolved `Type*`; annotate every identifier with its `Symbol*`.
+- [x] `--emit=ast` shows types after this phase.
+
+**Status: COMPLETE** (verified: 144 unit assertions + 18 golden cases green, clean -Werror build, both examples typecheck)
 
 **Exit criteria:** `tests/sema/` — every negative test produces exactly the expected message and location; every positive test type-checks clean.
 
