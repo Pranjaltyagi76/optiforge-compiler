@@ -1,0 +1,19 @@
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: true
+fn main() -> int {
+    print_bool(3 < 4);
+    print_bool(4 < 3);
+    print_bool(4 > 3);
+    print_bool(3 > 4);
+    print_bool(3 <= 3);
+    print_bool(4 <= 3);
+    print_bool(3 >= 3);
+    print_bool(3 == 3);
+    return 0;
+}

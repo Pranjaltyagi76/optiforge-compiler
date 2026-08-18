@@ -1,0 +1,15 @@
+// EXPECT-OUTPUT: 832040
+// EXPECT-OUTPUT: 3628800
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+fn fib(int n) -> int { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+fn fact(int n) -> int { if (n <= 1) { return 1; } return n * fact(n - 1); }
+fn even(int n) -> bool { if (n == 0) { return true; } return odd(n - 1); }
+fn odd(int n) -> bool { if (n == 0) { return false; } return even(n - 1); }
+fn main() -> int {
+    print_int(fib(30));
+    print_int(fact(10));
+    print_bool(even(10));
+    print_bool(even(7));
+    return 0;
+}

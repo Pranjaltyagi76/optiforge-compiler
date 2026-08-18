@@ -1,0 +1,14 @@
+// EXPECT-OUTPUT: 1
+// EXPECT-OUTPUT: 2
+// EXPECT-OUTPUT: 30
+fn shadowed() -> int { int v = 1; { int w = 2; print_int(v); print_int(w); } return v; }
+fn loop_local(int n) -> int {
+    int total = 0;
+    while (n > 0) { int step = n * 10; total = total + step; n = n - 1; }
+    return total;
+}
+fn main() -> int {
+    shadowed();
+    print_int(loop_local(2));
+    return 0;
+}

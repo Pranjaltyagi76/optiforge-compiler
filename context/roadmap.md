@@ -130,13 +130,15 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 4 — Naive Backend ⭐ *Vertical slice — the most important milestone*
 **Goal:** **A real, running executable.** Correctness only; performance explicitly not a goal.
 
-- [ ] x86-64 instruction representation (`MachineInstr`, `MachineOperand`: register/immediate/memory/label).
-- [ ] Trivial instruction selection: one IR instruction → a small fixed sequence.
-- [ ] Trivial register allocation: every value lives in a stack slot; load operands into scratch registers, compute, store back.
-- [ ] Stack frame layout, prologue/epilogue, System V AMD64 calling convention (integer args in `rdi rsi rdx rcx r8 r9`, return in `rax`/`xmm0`).
-- [ ] Assembly emission to `.s`.
-- [ ] Assemble and link via the system toolchain (`gcc`/`clang` as assembler + linker driver).
-- [ ] Minimal runtime: `print_int`, `print_float`, program entry shim.
+- [x] x86-64 instruction representation (`MachineInstr`, `MachineOperand`: register/immediate/memory/label).
+- [x] Trivial instruction selection: one IR instruction → a small fixed sequence.
+- [x] Trivial register allocation: every value lives in a stack slot; load operands into scratch registers, compute, store back.
+- [x] Stack frame layout, prologue/epilogue, System V AMD64 calling convention (integer args in `rdi rsi rdx rcx r8 r9`, return in `rax`/`xmm0`).
+- [x] Assembly emission to `.s`.
+- [x] Assemble and link via the system toolchain (`gcc`/`clang` as assembler + linker driver).
+- [x] Minimal runtime: `print_int`, `print_float`, program entry shim.
+
+**Status: COMPLETE** (verified: `optiforge examples/fib.of -o fib.exe && ./fib.exe` prints 832040; 232 unit assertions, 23 golden cases, 8 end-to-end programs across -O0/-O1/-O2; clean -Werror build in both Debug and Release; installed compiler links standalone.)
 
 **Exit criteria:** ⭐ `optiforge examples/fib.of -o fib && ./fib` prints the correct Fibonacci number. This is the moment the project becomes real.
 
@@ -295,7 +297,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 |---|---|---|---|
 | M1 | "It parses" | P1–P2 | `--emit=ast` on a typed program; errors on a broken one |
 | M2 | "It has an IR" | P3 | `--emit=ir` and `--emit=cfg` render a loop's CFG |
-| M3 | ⭐ **"It runs"** | P4 | `./fib` prints 832040 |
+| M3 | ⭐ **"It runs"** | P4 | ✅ **REACHED** — `./fib.exe` prints 832040 |
 | M4 | "It optimizes" | P7 | Same output, roughly 30–50% fewer IR instructions at `-O2` |
 | M5 | "It allocates registers" | P8 | Generated assembly keeps values in registers across a loop |
 | M6 | "It profiles" | P9–P10 | A `.prof` file plus a hot-path report identifying the real hot loop |

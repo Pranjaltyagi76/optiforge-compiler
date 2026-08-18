@@ -1,0 +1,22 @@
+// EXPECT-OUTPUT: 2
+// EXPECT-OUTPUT: 1
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 55
+// EXPECT-OUTPUT: 0
+fn classify(int n) -> int {
+    if (n > 10) { return 2; } else if (n > 0) { return 1; } else { return 0; }
+}
+fn sum_to(int n) -> int {
+    int total = 0;
+    int i = 1;
+    while (i <= n) { total = total + i; i = i + 1; }
+    return total;
+}
+fn main() -> int {
+    print_int(classify(50));
+    print_int(classify(5));
+    print_int(classify(-5));
+    print_int(sum_to(10));
+    print_int(sum_to(0));
+    return 0;
+}

@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -16,21 +18,15 @@
 #include "optiforge/ir/Printer.h"
 #include "optiforge/ir/Verifier.h"
 #include "optiforge/irgen/IRGen.h"
+#include "optiforge/backend/CodeGen.h"
+#include "optiforge/backend/TargetInfo.h"
+#include "optiforge/driver/Toolchain.h"
 #include "optiforge/support/Diagnostic.h"
 #include "optiforge/support/SourceManager.h"
 
 using namespace optiforge;
 
 namespace {
-
-/// Reports that a pipeline stage exists in the CLI but not yet in the compiler.
-ExitCode notImplemented(DiagnosticEngine& diags, EmitStage stage, int phase) {
-  diags.reportGlobal(DiagSeverity::Error,
-                     "--emit=" + std::string(toString(stage)) +
-                         " is not implemented yet (roadmap Phase " + std::to_string(phase) +
-                         ")");
-  return ExitCode::InternalError;
-}
 
 ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticEngine& diags) {
   const std::optional<FileID> file = sources.addFile(opts.inputPath);
@@ -105,25 +101,83 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     return ExitCode::Success;
   }
 
-  // --- Later stages ---
-  switch (opts.emit) {
-    case EmitStage::Ir:
-    case EmitStage::Cfg:
-      break;  // handled above
-    case EmitStage::Asm:
-    case EmitStage::Obj:
-    case EmitStage::Executable:
-      return notImplemented(diags, opts.emit, 4);
-    case EmitStage::Tokens:
-    case EmitStage::Ast:
-      break;  // handled above
+  // --- Code generation ---
+  backend::CodeGen codegen(backend::x86_64WindowsTarget());
+  const backend::MModule machine = codegen.run(*module);
+
+  if (opts.emit == EmitStage::Asm) {
+    backend::printAssembly(machine, std::cout);
+    return ExitCode::Success;
   }
-  return ExitCode::InternalError;
+
+  // --- Assemble and link ---
+  const std::filesystem::path inputPath(opts.inputPath);
+  const std::string stem = inputPath.stem().string();
+  std::filesystem::path outputPath =
+      opts.outputPath.empty() ? std::filesystem::path(stem + ".exe")
+                              : std::filesystem::path(opts.outputPath);
+
+  // Intermediates are named after the *output*, not the input: two inputs
+  // compiled to different outputs in one directory would otherwise write to
+  // the same .s and .o.
+  const std::string tempStem = outputPath.stem().string();
+  const std::filesystem::path asmPath = outputPath.parent_path() / (tempStem + ".s");
+  const std::filesystem::path objectPath = outputPath.parent_path() / (tempStem + ".o");
+
+  {
+    std::ofstream asmFile(asmPath);
+    if (!asmFile) {
+      diags.reportGlobal(DiagSeverity::Error,
+                         "cannot write assembly to '" + asmPath.string() + "'");
+      return ExitCode::EnvironmentError;
+    }
+    backend::printAssembly(machine, asmFile);
+  }
+
+  Toolchain toolchain(diags, opts.runtimeDir);
+
+  const auto cleanup = [&](bool keepObject) {
+    if (opts.keepTemps) {
+      return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(asmPath, ec);
+    if (!keepObject) {
+      std::filesystem::remove(objectPath, ec);
+    }
+  };
+
+  if (!toolchain.assemble(asmPath.string(), objectPath.string())) {
+    cleanup(false);
+    return ExitCode::EnvironmentError;
+  }
+
+  if (opts.emit == EmitStage::Obj) {
+    cleanup(/*keepObject=*/true);
+    return ExitCode::Success;
+  }
+
+  if (!toolchain.hasRuntime()) {
+    toolchain.reportMissingRuntime();
+    cleanup(false);
+    return ExitCode::EnvironmentError;
+  }
+
+  if (!toolchain.link(objectPath.string(), outputPath.string())) {
+    cleanup(false);
+    return ExitCode::EnvironmentError;
+  }
+
+  cleanup(false);
+  return ExitCode::Success;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Recorded so the runtime library can be found relative to this executable.
+  Toolchain::setExecutablePath(argv[0]);
+
   Options opts;
   if (!parseOptions(argc, argv, opts, std::cerr)) {
     return toInt(ExitCode::UsageError);

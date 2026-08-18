@@ -1,0 +1,16 @@
+// Six integer arguments: two must travel on the stack, above the 32-byte
+// shadow space. Mixed float/int arguments share the four register positions.
+// EXPECT-OUTPUT: 91
+// EXPECT-OUTPUT: 10.75
+// EXPECT-OUTPUT: 21
+fn six(int a, int b, int c, int d, int e, int f) -> int {
+    return a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6;
+}
+fn mixed(float a, int b, float c, int d) -> float { return a + c + b + d; }
+fn nested(int x) -> int { return six(x, x, x, x, x, x); }
+fn main() -> int {
+    print_int(six(1, 2, 3, 4, 5, 6));
+    print_float(mixed(1.5, 2, 3.25, 4));
+    print_int(nested(1));
+    return 0;
+}

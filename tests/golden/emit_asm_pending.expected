@@ -1,6 +1,0 @@
-=== exit ===
-70
-=== stdout ===
-=== stderr ===
-optiforge: error: --emit=asm is not implemented yet (roadmap Phase 4)
-1 error generated.

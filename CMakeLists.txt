@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(OptiForge VERSION 0.1.0 LANGUAGES CXX)
+project(OptiForge VERSION 0.1.0 LANGUAGES CXX C)  # C is needed for the target runtime
 
 # ---------------------------------------------------------------------------
 # Global settings
@@ -114,11 +114,15 @@ add_subdirectory(src/support)   # of_support  — depends on nothing
 add_subdirectory(src/frontend)  # of_frontend — lexer, AST, parser
 add_subdirectory(src/ir)        # of_ir      - value model, CFG, verifier, printers
 add_subdirectory(src/irgen)     # of_irgen   - typed AST -> IR lowering
+add_subdirectory(src/backend)         # of_backend - machine IR, codegen, asm printer
+add_subdirectory(src/target/x86_64)   # of_target_x86_64 - Microsoft x64 ABI facts
 add_subdirectory(src/driver)    # optiforge   — the CLI executable
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+add_subdirectory(runtime)       # libofrt - target runtime, NOT linked into the compiler
+
 enable_testing()
 add_subdirectory(tests)
 
@@ -136,3 +140,15 @@ else()
   message(STATUS "  Sanitizers      : (none)")
 endif()
 message(STATUS "")
+
+# ---------------------------------------------------------------------------
+# Install layout (deployment.md §5)
+#
+#   <prefix>/bin/optiforge
+#   <prefix>/lib/optiforge/libofrt.a
+#
+# The driver locates the runtime as <dir-of-executable>/../lib/optiforge, so
+# this layout is what makes an installed compiler able to link programs.
+# ---------------------------------------------------------------------------
+install(TARGETS optiforge RUNTIME DESTINATION bin)
+install(TARGETS ofrt ARCHIVE DESTINATION lib/optiforge)

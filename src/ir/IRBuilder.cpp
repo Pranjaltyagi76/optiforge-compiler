@@ -108,7 +108,18 @@ Instruction* IRBuilder::createEntryAlloca(const Type* allocatedType,
   instruction->setAllocatedType(allocatedType);
   instruction->setName(name + ".addr");
 
-  BasicBlock* entry = function()->entry();
+  // Both null checks are real, not defensive noise: -O3 inlines far enough to
+  // prove the dereference is reachable, and a builder with no insertion point
+  // has no entry block to put a slot in.
+  Function* parent = function();
+  if (parent == nullptr) {
+    return nullptr;
+  }
+  BasicBlock* entry = parent->entry();
+  if (entry == nullptr) {
+    return nullptr;
+  }
+
   // The entry block is already terminated once the first statement branches
   // away, so appending would put the alloca after its terminator.
   return entry->insertBeforeTerminator(std::move(instruction));

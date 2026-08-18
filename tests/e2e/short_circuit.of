@@ -1,0 +1,14 @@
+// A false left operand must stop evaluation: otherwise these divide by zero.
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+fn safe_and(int d, int n) -> bool { return d != 0 && n / d > 1; }
+fn safe_or(int d, int n) -> bool { return d == 0 || n / d > 1; }
+fn main() -> int {
+    print_bool(safe_and(0, 10));
+    print_bool(safe_and(2, 10));
+    print_bool(safe_or(0, 10));
+    print_bool(safe_or(20, 10));
+    return 0;
+}

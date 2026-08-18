@@ -242,6 +242,17 @@ The module dependency rules in `architectural_design.md` §3 are enforced here w
 
 Warnings-as-errors in every configuration (NFR-08): `-Wall -Wextra -Wpedantic -Werror`.
 
+> **Build both `debug` and `release` before committing.** They are not
+> interchangeable checks. At `-O3` GCC inlines far enough to run analyses it
+> cannot run at `-O0`, and `-Wnull-dereference` in particular only fires there.
+> Phase 4 found two real null-dereference sites this way, in code that had
+> built cleanly in Debug for three phases. Until CI exists, running both is
+> manual:
+>
+> ```
+> cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-release -j
+> ```
+
 ### 4.3 Standard Commands
 
 Configure and build:

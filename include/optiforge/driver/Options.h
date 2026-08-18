@@ -39,6 +39,8 @@ struct Options {
   int optLevel = 0;
   EmitStage emit = EmitStage::Executable;
   bool warningsAsErrors = false;
+  std::string runtimeDir;
+  bool keepTemps = false;
   bool showHelp = false;
   bool showVersion = false;
 };

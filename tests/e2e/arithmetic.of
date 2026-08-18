@@ -1,0 +1,17 @@
+// EXPECT-OUTPUT: 7
+// EXPECT-OUTPUT: -1
+// EXPECT-OUTPUT: 12
+// EXPECT-OUTPUT: 3
+// EXPECT-OUTPUT: 2
+// EXPECT-OUTPUT: -5
+// EXPECT-OUTPUT: -1
+fn main() -> int {
+    print_int(3 + 4);
+    print_int(3 - 4);
+    print_int(3 * 4);
+    print_int(17 / 5);
+    print_int(17 % 5);
+    print_int(-5);
+    print_int(-7 % 3);
+    return 0;
+}

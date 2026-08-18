@@ -51,7 +51,14 @@ void Verifier::checkFunction(const Function& function) {
   const std::string fnContext = "function @" + function.name();
 
   // --- Entry block ---
+  // isDeclaration() already implies a block exists, but the compiler cannot
+  // see that through the container, and a missing entry block is worth
+  // reporting as the structural error it would be.
   const BasicBlock* entry = function.entry();
+  if (entry == nullptr) {
+    report(fnContext, "function has a body but no entry block");
+    return;
+  }
   if (!entry->predecessors().empty()) {
     report(fnContext, "entry block '" + entry->label() +
                           "' has predecessors, which breaks dominance");

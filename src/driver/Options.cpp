@@ -93,6 +93,16 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       continue;
     }
 
+    if (startsWith(arg, "--runtime-dir=")) {
+      out.runtimeDir = std::string(arg.substr(std::string_view("--runtime-dir=").size()));
+      continue;
+    }
+
+    if (arg == "--keep-temps") {
+      out.keepTemps = true;
+      continue;
+    }
+
     if (arg == "-Werror") {
       out.warningsAsErrors = true;
       continue;

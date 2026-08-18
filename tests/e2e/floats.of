@@ -1,0 +1,16 @@
+// EXPECT-OUTPUT: 3.5
+// EXPECT-OUTPUT: 1.5
+// EXPECT-OUTPUT: 2.5
+// EXPECT-OUTPUT: -2.5
+// EXPECT-OUTPUT: 5.5
+// EXPECT-OUTPUT: true
+fn main() -> int {
+    print_float(1.5 + 2.0);
+    print_float(3.0 - 1.5);
+    print_float(1.25 * 2.0);
+    print_float(-2.5);
+    float widened = 3;
+    print_float(widened + 2.5);
+    print_bool(1.5 < 2.5);
+    return 0;
+}
