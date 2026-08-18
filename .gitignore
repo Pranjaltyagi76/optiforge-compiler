@@ -1,0 +1,42 @@
+# Build output
+build*/
+cmake-build-*/
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+
+# Compiler intermediates and binaries
+*.o
+*.a
+*.s
+*.obj
+*.exe
+*.out
+a.out
+optiforge
+optiforge.exe
+
+# Profile data — machine- and workload-specific, regenerable.
+# Test fixtures under tests/pgo/fixtures/ must be force-added: git add -f
+*.prof
+
+# Metrics: raw harness output is regenerable noise.
+# Commit the raw data behind a published result by placing it in a published/ dir.
+metrics/raw/**
+!metrics/raw/.gitkeep
+!metrics/raw/**/published/
+!metrics/raw/**/published/**
+
+# Python tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
