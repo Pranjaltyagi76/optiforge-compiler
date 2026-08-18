@@ -1,0 +1,64 @@
+=== exit ===
+0
+=== stdout ===
+digraph cfg {
+  graph [fontname="monospace"];
+  node  [shape=box, fontname="monospace"];
+  edge  [fontname="monospace"];
+
+  subgraph cluster_classify {
+    label="@classify";
+    "classify:entry" [label="entry"];
+    "classify:if.then.1" [label="if.then.1"];
+    "classify:if.else.2" [label="if.else.2"];
+    "classify:if.then.4" [label="if.then.4"];
+    "classify:if.else.5" [label="if.else.5"];
+    "classify:entry" -> "classify:if.then.1" [label="true"];
+    "classify:entry" -> "classify:if.else.2" [label="false"];
+    "classify:if.else.2" -> "classify:if.then.4" [label="true"];
+    "classify:if.else.2" -> "classify:if.else.5" [label="false"];
+  }
+
+  subgraph cluster_accumulate {
+    label="@accumulate";
+    "accumulate:entry" [label="entry"];
+    "accumulate:while.cond.1" [label="while.cond.1"];
+    "accumulate:while.body.2" [label="while.body.2"];
+    "accumulate:while.end.3" [label="while.end.3"];
+    "accumulate:if.then.4" [label="if.then.4"];
+    "accumulate:if.end.5" [label="if.end.5"];
+    "accumulate:entry" -> "accumulate:while.cond.1";
+    "accumulate:while.cond.1" -> "accumulate:while.body.2" [label="true"];
+    "accumulate:while.cond.1" -> "accumulate:while.end.3" [label="false"];
+    "accumulate:while.body.2" -> "accumulate:if.then.4" [label="true"];
+    "accumulate:while.body.2" -> "accumulate:if.end.5" [label="false"];
+    "accumulate:if.then.4" -> "accumulate:if.end.5";
+    "accumulate:if.end.5" -> "accumulate:while.cond.1";
+  }
+
+  subgraph cluster_logic {
+    label="@logic";
+    "logic:entry" [label="entry"];
+    "logic:and.rhs.1" [label="and.rhs.1"];
+    "logic:and.end.2" [label="and.end.2"];
+    "logic:or.rhs.3" [label="or.rhs.3"];
+    "logic:or.end.4" [label="or.end.4"];
+    "logic:entry" -> "logic:and.rhs.1" [label="true"];
+    "logic:entry" -> "logic:and.end.2" [label="false"];
+    "logic:and.rhs.1" -> "logic:and.end.2";
+    "logic:and.end.2" -> "logic:or.end.4" [label="true"];
+    "logic:and.end.2" -> "logic:or.rhs.3" [label="false"];
+    "logic:or.rhs.3" -> "logic:or.end.4";
+  }
+
+  subgraph cluster_widen {
+    label="@widen";
+    "widen:entry" [label="entry"];
+  }
+
+  subgraph cluster_main {
+    label="@main";
+    "main:entry" [label="entry"];
+  }
+}
+=== stderr ===

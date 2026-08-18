@@ -112,6 +112,8 @@ endif()
 # ---------------------------------------------------------------------------
 add_subdirectory(src/support)   # of_support  — depends on nothing
 add_subdirectory(src/frontend)  # of_frontend — lexer, AST, parser
+add_subdirectory(src/ir)        # of_ir      - value model, CFG, verifier, printers
+add_subdirectory(src/irgen)     # of_irgen   - typed AST -> IR lowering
 add_subdirectory(src/driver)    # optiforge   — the CLI executable
 
 # ---------------------------------------------------------------------------

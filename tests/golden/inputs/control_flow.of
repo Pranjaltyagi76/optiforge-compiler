@@ -1,0 +1,39 @@
+fn classify(int n) -> int {
+    if (n > 10) {
+        return 2;
+    } else if (n > 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn accumulate(int n) -> int {
+    int total = 0;
+    while (n > 0) {
+        int step = n;
+        if (n > 5) {
+            step = step + 1;
+        }
+        total = total + step;
+        n = n - 1;
+    }
+    return total;
+}
+
+fn logic(int a, int b) -> bool {
+    return a > 0 && b > 0 || a == b;
+}
+
+fn widen(int i, float g) -> float {
+    float scaled = i;
+    return scaled * 2 + g;
+}
+
+fn main() -> int {
+    print_int(classify(5));
+    print_int(accumulate(7));
+    print_bool(logic(1, 2));
+    print_float(widen(3, 1.5));
+    return 0;
+}

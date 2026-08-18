@@ -1,0 +1,49 @@
+=== exit ===
+0
+=== stdout ===
+module "examples/sum.of" hash=0x58e6b80ffffa7148
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @sum(i64 %n) -> i64 {
+entry:
+  %n.addr = alloca i64
+  store i64 %n, %n.addr
+  %total.addr = alloca i64
+  store i64 0, %total.addr
+  %i.addr = alloca i64
+  store i64 0, %i.addr
+  br while.cond.1
+
+while.cond.1:                                   ; preds = entry, while.body.2
+  %t0 = load i64, %i.addr
+  %t1 = load i64, %n.addr
+  %t2 = icmp lt i64 %t0, %t1
+  condbr %t2, while.body.2, while.end.3
+
+while.body.2:                                   ; preds = while.cond.1
+  %t3 = load i64, %total.addr
+  %t4 = load i64, %i.addr
+  %t5 = add i64 %t3, %t4
+  store i64 %t5, %total.addr
+  %t6 = load i64, %i.addr
+  %t7 = add i64 %t6, 1
+  store i64 %t7, %i.addr
+  br while.cond.1
+
+while.end.3:                                    ; preds = while.cond.1
+  %t8 = load i64, %total.addr
+  ret i64 %t8
+}
+
+fn @main() -> i64 {
+entry:
+  %t0 = call i64 @sum(i64 100)
+  call void @print_int(i64 %t0)
+  ret i64 0
+}
+=== stderr ===

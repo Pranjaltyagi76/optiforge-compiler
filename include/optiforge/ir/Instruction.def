@@ -1,0 +1,58 @@
+// The single source of truth for the IR instruction set.
+//
+// Every consumer -- the opcode enum, the mnemonic table, the verifier, the
+// printer, and later the instruction selector -- is generated from this list,
+// so adding an instruction cannot leave one of them behind.
+//
+//   OPCODE(Name, Mnemonic, NumOperands, HasResult, IsTerminator)
+//
+// NumOperands == -1 means variadic (Call, Ret, Phi).
+
+#ifndef OPCODE
+#error "define OPCODE before including Instruction.def"
+#endif
+
+// --- Integer arithmetic ---
+OPCODE(Add,    "add",    2, true,  false)
+OPCODE(Sub,    "sub",    2, true,  false)
+OPCODE(Mul,    "mul",    2, true,  false)
+OPCODE(SDiv,   "sdiv",   2, true,  false)
+OPCODE(SRem,   "srem",   2, true,  false)
+OPCODE(Neg,    "neg",    1, true,  false)
+
+// --- Floating-point arithmetic ---
+OPCODE(FAdd,   "fadd",   2, true,  false)
+OPCODE(FSub,   "fsub",   2, true,  false)
+OPCODE(FMul,   "fmul",   2, true,  false)
+OPCODE(FDiv,   "fdiv",   2, true,  false)
+OPCODE(FNeg,   "fneg",   1, true,  false)
+
+// --- Logical ---
+OPCODE(Not,    "not",    1, true,  false)
+
+// --- Comparison: result is always i1 ---
+OPCODE(ICmp,   "icmp",   2, true,  false)
+OPCODE(FCmp,   "fcmp",   2, true,  false)
+
+// --- Conversion ---
+OPCODE(SIToFP, "sitofp", 1, true,  false)
+
+// --- Memory ---
+OPCODE(Alloca, "alloca", 0, true,  false)
+OPCODE(Load,   "load",   1, true,  false)
+OPCODE(Store,  "store",  2, false, false)
+
+// --- Control flow ---
+OPCODE(Br,     "br",     0, false, true)
+OPCODE(CondBr, "condbr", 1, false, true)
+OPCODE(Ret,    "ret",   -1, false, true)
+
+// --- Calls ---
+OPCODE(Call,   "call",  -1, true,  false)
+
+// --- SSA (populated in Phase 6; the opcode exists now so the printer,
+//     verifier and CFG code are written for it from the start) ---
+OPCODE(Phi,    "phi",   -1, true,  false)
+
+// --- Produced by SSA destruction in Phase 6 ---
+OPCODE(Copy,   "copy",   1, true,  false)

@@ -12,6 +12,10 @@
 #include "optiforge/frontend/Sema.h"
 #include "optiforge/frontend/Symbol.h"
 #include "optiforge/frontend/Token.h"
+#include "optiforge/ir/Module.h"
+#include "optiforge/ir/Printer.h"
+#include "optiforge/ir/Verifier.h"
+#include "optiforge/irgen/IRGen.h"
 #include "optiforge/support/Diagnostic.h"
 #include "optiforge/support/SourceManager.h"
 
@@ -78,11 +82,34 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     return ExitCode::Success;
   }
 
+  // --- IR generation ---
+  IRGen irgen(diags, opts.inputPath, sources.contentHash(*file));
+  const std::unique_ptr<ir::Module> module = irgen.run(*program);
+
+  ir::Verifier verifier;
+  if (!verifier.verify(*module)) {
+    // Invalid IR is a compiler bug, not a user error. Say so plainly and name
+    // what is wrong rather than letting a later stage crash on it.
+    diags.reportGlobal(DiagSeverity::Error,
+                       "internal compiler error: generated IR failed verification");
+    verifier.printErrors(std::cerr);
+    return ExitCode::InternalError;
+  }
+
+  if (opts.emit == EmitStage::Ir) {
+    ir::printModule(*module, std::cout);
+    return ExitCode::Success;
+  }
+  if (opts.emit == EmitStage::Cfg) {
+    ir::printCFG(*module, std::cout);
+    return ExitCode::Success;
+  }
+
   // --- Later stages ---
   switch (opts.emit) {
     case EmitStage::Ir:
     case EmitStage::Cfg:
-      return notImplemented(diags, opts.emit, 3);
+      break;  // handled above
     case EmitStage::Asm:
     case EmitStage::Obj:
     case EmitStage::Executable:

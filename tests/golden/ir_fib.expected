@@ -1,0 +1,41 @@
+=== exit ===
+0
+=== stdout ===
+module "examples/fib.of" hash=0x672f63ace66945d8
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @fib(i64 %n) -> i64 {
+entry:
+  %n.addr = alloca i64
+  store i64 %n, %n.addr
+  %t0 = load i64, %n.addr
+  %t1 = icmp lt i64 %t0, 2
+  condbr %t1, if.then.1, if.end.2
+
+if.then.1:                                      ; preds = entry
+  %t2 = load i64, %n.addr
+  ret i64 %t2
+
+if.end.2:                                       ; preds = entry
+  %t3 = load i64, %n.addr
+  %t4 = sub i64 %t3, 1
+  %t5 = call i64 @fib(i64 %t4)
+  %t6 = load i64, %n.addr
+  %t7 = sub i64 %t6, 2
+  %t8 = call i64 @fib(i64 %t7)
+  %t9 = add i64 %t5, %t8
+  ret i64 %t9
+}
+
+fn @main() -> i64 {
+entry:
+  %t0 = call i64 @fib(i64 30)
+  call void @print_int(i64 %t0)
+  ret i64 0
+}
+=== stderr ===
