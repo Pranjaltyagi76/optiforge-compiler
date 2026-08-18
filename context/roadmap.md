@@ -307,9 +307,10 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 
 | Risk | Impact | Likelihood | Mitigation |
 |---|---|---|---|
-| **Target-OS mismatch** — the spec says x86-64 **Linux**, the dev machine is **Windows 11** | High | Certain | Decide early: WSL2 as the canonical target (recommended), or add a Windows x64 / Microsoft-ABI backend. See `deployment.md` §2. Do not defer past Phase 4. |
+| ~~Target-OS mismatch~~ **RETIRED 2026-08-18** | — | — | Resolved: target is x86-64 Windows, Microsoft x64 ABI (ADR-10). Deviation from the brief is recorded and accepted; `TargetInfo` keeps a System V target open. |
 | Scope creep in the language (structs, pointers, generics) | High | High | The language is frozen at the agreed feature set until Phase 12 is complete. Phase 13 only. |
 | SSA construction/destruction bugs | High | Medium | Verifier after every pass; differential testing `-O0` vs `-On`; keep SSA behind a flag until stable |
+| No sanitizers on MinGW, so QA-07 cannot be met | Medium | Certain | Consequence of ADR-10. Memory bugs must be caught by design and review; Phase 3 found a teardown use-after-free by inspection, which is the standard this now requires. |
 | Register allocator miscompiles under pressure | High | Medium | Keep the Phase-4 stack allocator as a permanent fallback (`--regalloc=naive`); stress tests with more than 16 simultaneously live values |
 | Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme, source hash in the header, and a loud warning on mismatch (Phases 9–10) |
 | Instrumentation perturbs the behaviour it measures | Medium | Medium | Instrument late in the pipeline; measure and document overhead; prefer edge counters over block counters where equivalent |

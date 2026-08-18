@@ -18,42 +18,52 @@ Three separate artifacts are deployed, and confusing them is the most common sou
 
 ---
 
-## 2. ⚠ The Target Platform Decision (resolves ADR-10)
+## 2. Target Platform (ADR-10 — RESOLVED)
 
-**This is the first decision to make, and it must be made before Phase 4 begins.**
+**Target: x86-64 Windows, Microsoft x64 ABI.** Decided 2026-08-18, before Phase 4.
 
-- The project brief specifies **x86-64 Linux** (System V AMD64 ABI).
-- The development machine is **Windows 11 Home Single Language (x64)**.
+The project is developed, built and run on Windows, and the full toolchain is
+already installed and working there. The backend targets the platform it
+actually runs on.
 
-These are different ABIs, different assembler syntaxes, different object formats, and different runtime libraries. Choosing late means rewriting calling-convention lowering, register allocation constraints, and both runtime libraries.
+### What this means in practice
 
-### The options
+| | Value |
+|---|---|
+| ABI | Microsoft x64 |
+| Integer argument registers | `rcx rdx r8 r9` — four, then the stack |
+| Float argument registers | `xmm0`–`xmm3` |
+| Shadow space | 32 bytes, reserved by the **caller**, at every call |
+| Return | `rax` / `xmm0` |
+| Callee-saved | `rbx rbp rdi rsi rsp r12-r15`, `xmm6`–`xmm15` |
+| Stack alignment at `call` | 16 bytes |
+| Assembler + linker | GNU `as` / `ld`, driven by MinGW `gcc` |
+| Executable format | PE/COFF (`.exe`) |
 
-| | **Option A — WSL2 (recommended)** | **Option B — Native Windows x64** | **Option C — Both** |
-|---|---|---|---|
-| Target ABI | System V AMD64 | Microsoft x64 | Both, behind `TargetInfo` |
-| Argument registers | `rdi rsi rdx rcx r8 r9` | `rcx rdx r8 r9` only (4) |  — |
-| Shadow space | none | 32 bytes required at every call |  — |
-| Callee-saved | `rbx rbp r12–r15` | `rbx rbp rdi rsi r12–r15 xmm6–15` |  — |
-| Assembler / linker | `gcc`/`clang` in WSL2 | MinGW-w64 `gcc`, or MSVC `ml64` + `link` |  — |
-| Matches the brief | ✅ exactly | ❌ deviates | ✅ |
-| Reference material available | Enormous (all compiler literature assumes SysV) | Sparse | — |
-| Debugging tools | `gdb`, `objdump`, `perf` — all first-class | `windbg`, more friction | — |
-| Setup cost | ~30 min once | ~1 hour | — |
-| Ongoing cost | Edit in Windows, build and run in WSL2 | None | Roughly 1.5× backend work |
+The shadow space is the item most likely to bite: the caller must reserve 32
+bytes below the return address even when the callee takes no arguments.
+Omitting it produces crashes inside called functions that look like bugs in the
+callee.
 
-### Recommendation: **Option A — WSL2 with Ubuntu**
+### Accepted costs
 
-Reasons, in order of weight:
+These are consequences, not objections — the decision is made.
 
-1. **The literature assumes System V.** Every register-allocation paper, every ABI reference, every "how does `idiv` work" answer you will search for during Phase 4 and Phase 8 assumes SysV. Fighting that for months to avoid a 30-minute setup is a bad trade.
-2. **`perf` exists on Linux.** Phase 12 requires believable benchmark numbers, and validating your own profiler against a real one is enormously reassuring. Windows has no equivalent that is as easy to use.
-3. **The brief says Linux.** Deviating requires justification in the report; matching it does not.
-4. **Option C stays available.** Because all ABI facts live behind `TargetInfo` from day one (per `architectural_design.md` §6, ADR-10), adding a Windows target later is a data change, not a rewrite. Starting with A does not close the door on B.
+- **The brief specifies Linux.** The final report should record the deviation.
+- **No `perf`.** `metrics/methodology.md` §6 Level 2 (cross-checking our
+  profiler against an independent sampler) is unavailable. Level 1 hand
+  verification of counter accuracy (metric I-05) therefore has to carry the
+  whole weight in Phase 9.
+- **No ASan/UBSan.** MinGW ships no sanitizer runtimes, so requirement QA-07
+  cannot be met here. The build already fails loudly at configure time if
+  sanitizers are requested (§4.2), rather than at link time.
+- **Sparser reference material.** Compiler literature overwhelmingly assumes
+  System V; use Microsoft's x64 calling-convention documentation for ABI facts.
 
-The rest of this document assumes **Option A**, with Windows-native notes where they differ.
+### What stays open
 
-> **Action required:** confirm this choice before starting Phase 4. Record the decision by replacing this callout with the resolution, and update ADR-10 in `architectural_design.md`.
+Every ABI fact lives behind `TargetInfo`. Adding a System V target later is a
+data change, not a rewrite, so nothing here forecloses it.
 
 ---
 
@@ -82,31 +92,37 @@ All of the following are free — see §3.5 for the licensing audit.
 
 ### 3.3 Optional but Strongly Recommended
 
-| Tool | Use |
+| Tool | Use | Available on this target? |
+|---|---|---|
+| `gdb` | Debugging generated assembly — indispensable in Phase 4 | ✅ installed |
+| `objdump -d` | Verifying emitted instructions | ✅ installed |
+| `clang-format` | Enforcing NFR-08 | ✅ ships with Clang |
+| `graphviz` (`dot`) | Rendering `--emit=cfg` output | ❌ not installed — `winget install Graphviz.Graphviz` |
+| `perf` | Validating the profiler against an independent sampler | ❌ Linux only — see §2 accepted costs |
+| `valgrind` | Memory checking the compiler itself | ❌ Linux only |
+
+### 3.4 Toolchain on This Machine
+
+Already installed and verified working:
+
+| Component | Version |
 |---|---|
-| `gdb` | Debugging generated assembly — indispensable in Phase 4 |
-| `objdump -d` | Verifying emitted instructions |
-| `perf` | Validating our profiler against a real one; benchmark sanity |
-| `graphviz` (`dot`) | Rendering `--emit=cfg` output |
-| `clang-format` | Enforcing NFR-08 |
-| `valgrind` | Complements ASan for the compiler itself |
+| GCC (MinGW-w64, UCRT, POSIX threads, SEH) | 16.1.0 |
+| CMake | 4.3.3 |
+| Ninja | 1.13.2 |
+| Python | 3.14.6 |
+| binutils (`as`, `ld`, `objdump`) | bundled with the GCC distribution |
+| GDB | bundled |
 
-### 3.4 WSL2 Setup (one-time)
+Nothing further is required to build the compiler or to assemble and link the
+programs it produces.
 
-```bash
-wsl --install -d Ubuntu
-```
-
-Then inside Ubuntu:
-
-```bash
-sudo apt update && sudo apt install -y build-essential cmake ninja-build git python3 python3-pip gdb graphviz clang-format binutils linux-tools-common
-```
-
-**Workflow:** keep the project on the Windows filesystem for editing, but be aware that building across `/mnt/c/` is slow. Two workable patterns:
-
-- **Recommended:** clone into the WSL2 filesystem (`~/CompilerProject1`) and edit through VS Code's WSL remote extension. Full-speed I/O.
-- **Alternative:** keep the source at `/mnt/c/Users/Pranjal Tyagi/Desktop/CompilerProject1` and set the CMake build directory inside the Linux filesystem, so only source reads cross the boundary.
+**One hazard specific to this machine.** Three different `libstdc++-6.dll`
+copies sit on `PATH` (MSYS2, WinLibs, and a WinGet package). A binary built by
+one GCC would load whichever the loader found first, and the ABI mismatch
+produced silently wrong behaviour — an `ifstream` open that failed without
+setting `failbit`. The build links the runtime statically (§4.1) so OptiForge
+binaries import only Windows system DLLs. Do not remove those link options.
 
 Note the space in `Pranjal Tyagi` — quote paths in every script.
 
@@ -129,17 +145,13 @@ Everything specified in this document set already satisfies the constraint. No s
 | **GNU Make** | Build executor (fallback) | GPLv3 | Free |
 | **Python 3** | Test runner, benchmark harness, tooling | PSF License | Free |
 | **Git** | Version control | GPLv2 | Free |
-| **WSL2** | Linux environment on Windows | Included with Windows — no extra licence | Free |
-| **Ubuntu** | Target OS distribution | Various FOSS licences | Free |
 | **binutils** (`as`, `ld`, `objdump`, `readelf`) | Assembling, linking, inspecting output | GPLv3 | Free |
 | **GDB** | Debugging generated assembly | GPLv3 | Free |
-| **perf** | Benchmark validation against a real profiler | GPLv2 (Linux kernel tools) | Free |
-| **Valgrind** | Memory checking for the compiler | GPLv2 | Free |
-| **ASan / UBSan** | Sanitizers — built into GCC and Clang | Compiler licence | Free |
+| **ASan / UBSan** | Sanitizers — unavailable on MinGW, see §2 | Compiler licence | Free |
 | **Graphviz** (`dot`) | Rendering `--emit=cfg` | EPL-1.0 | Free |
 | **doctest** | Unit-test framework (optional) | MIT | Free |
 | **Catch2** | Unit-test framework (alternative) | BSL-1.0 | Free |
-| **VS Code** | Editor, with the free WSL remote extension | MIT source; free binary | Free |
+| **VS Code** | Editor | MIT source; free binary | Free |
 | **GitHub** | Repository hosting | — | Free |
 | **GitHub Actions** | CI | — | Free tier — see 3.5.3 |
 
@@ -151,8 +163,8 @@ Recorded so none of these creeps in later:
 
 | Avoided | Why | Free alternative in use |
 |---|---|---|
-| Visual Studio (full IDE) | Community edition is free only under revenue and org-size eligibility rules | VS Code + GCC/Clang under WSL2 |
-| MSVC toolset | Reachable free via Build Tools, but pulls in Windows-ABI backend work | GCC under WSL2 (Option A, §2) |
+| Visual Studio (full IDE) | Community edition is free only under revenue and org-size eligibility rules | VS Code + MinGW GCC |
+| MSVC toolset | Reachable free via Build Tools, but a second toolchain to keep working for no gain | MinGW GCC, already installed |
 | Intel VTune / Advisor | Free tier requires an account and registration | `perf` |
 | CLion, Sublime Text | Paid or nag-limited | VS Code |
 | JetBrains toolchain, ReSharper C++ | Paid | — |

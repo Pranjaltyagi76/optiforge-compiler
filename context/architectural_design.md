@@ -267,11 +267,34 @@ Recorded in ADR style: decision, rationale, consequences, and what would make us
 
 ---
 
-### ADR-10 — Target OS must be decided before Phase 4
-**Decision:** *Open.* The brief specifies x86-64 **Linux** (System V ABI); the development machine is **Windows 11**.
-**Options:** (a) WSL2 as the canonical target — recommended, keeps System V ABI, keeps the brief intact; (b) native Windows x64 target — different ABI (`rcx rdx r8 r9`, 32-byte shadow space), different assembler syntax, more work; (c) both, behind `TargetInfo`.
-**Why it is architectural:** the ABI reaches into calling-convention lowering, register allocation, and the runtime libraries. Choosing late means rewriting all three.
-**Consequence either way:** all ABI facts live behind `TargetInfo` from day one, so option (c) stays open. See `deployment.md` §2 for the full comparison.
+### ADR-10 — Target platform
+**Decision:** **RESOLVED — x86-64 Windows (Microsoft x64 ABI).** Recorded 2026-08-18, before Phase 4.
+
+**Rationale:** the project is developed, built, and run on Windows. The complete toolchain is already present and working there — GCC 16.1.0 (MinGW-w64/UCRT), `as`, `ld`, `objdump`, `gdb` — so the backend targets the platform it actually runs on. The earlier recommendation of WSL2 was set aside deliberately: it buys System V and `perf` at the cost of a second environment to install and maintain, and the owner's platform is Windows.
+
+**What this fixes:**
+
+| Fact | Value |
+|---|---|
+| ABI | Microsoft x64 |
+| Integer argument registers | `rcx rdx r8 r9` (4, not 6) |
+| Float argument registers | `xmm0`–`xmm3` |
+| Shadow space | **32 bytes reserved by the caller at every call** |
+| Integer return | `rax` |
+| Callee-saved | `rbx rbp rdi rsi rsp r12-r15`, `xmm6`–`xmm15` |
+| Caller-saved | `rax rcx rdx r8-r11`, `xmm0`–`xmm5` |
+| Stack alignment at `call` | 16 bytes |
+| Assembler / linker | GNU `as` and `ld` via the MinGW `gcc` driver |
+| Executable format | PE/COFF |
+
+**Consequences, stated plainly rather than argued:**
+
+- The brief specifies Linux. This deviates, and the final report should say so and why.
+- `perf` is unavailable, so the profiler validation in Phase 12 rests on hand-verified counts (metric I-05) rather than an independent oracle. That check becomes more important, not less — see `metrics/methodology.md` §6, whose Level 2 cross-check is now unavailable.
+- ASan/UBSan are unavailable on MinGW, so requirement QA-07 cannot be satisfied on this platform. Memory bugs must be caught by design and review instead — the teardown use-after-free found in Phase 3 was caught by inspection, which is the standard this project now has to hold itself to.
+- Most compiler literature assumes System V; ABI details must be read from Microsoft's x64 calling-convention documentation instead.
+
+**Still open, deliberately:** every ABI fact lives behind `TargetInfo`, so adding a System V target later remains a data change rather than a rewrite. Nothing about this decision forecloses that.
 
 ---
 
