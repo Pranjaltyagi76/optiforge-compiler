@@ -111,6 +111,7 @@ endif()
 # graph below. Adding a forbidden dependency breaks the build, by design.
 # ---------------------------------------------------------------------------
 add_subdirectory(src/support)   # of_support  — depends on nothing
+add_subdirectory(src/frontend)  # of_frontend — lexer, AST, parser
 add_subdirectory(src/driver)    # optiforge   — the CLI executable
 
 # ---------------------------------------------------------------------------

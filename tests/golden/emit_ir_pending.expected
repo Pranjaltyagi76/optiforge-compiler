@@ -1,0 +1,6 @@
+=== exit ===
+70
+=== stdout ===
+=== stderr ===
+optiforge: error: --emit=ir is not implemented yet (roadmap Phase 3)
+1 error generated.

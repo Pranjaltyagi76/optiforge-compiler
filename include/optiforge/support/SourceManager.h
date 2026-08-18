@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -52,7 +53,12 @@ private:
 
   const Entry* entry(FileID file) const;
 
-  std::vector<Entry> files_;
+  // std::deque, not std::vector: Token::lexeme and every diagnostic snippet are
+  // string_views into Entry::contents. A vector reallocates on growth, which
+  // moves each Entry -- and a short string stores its bytes inside the object,
+  // so its data address changes and all outstanding views dangle. deque keeps
+  // references to existing elements valid across push_back.
+  std::deque<Entry> files_;
 };
 
 }  // namespace optiforge

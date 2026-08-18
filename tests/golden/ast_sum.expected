@@ -1,0 +1,37 @@
+=== exit ===
+0
+=== stdout ===
+Program
+  FunctionDecl 'sum' -> int
+    ParamDecl 'n' : int
+    Block
+      VarDeclStmt 'total' : int
+        IntLiteral 0
+      VarDeclStmt 'i' : int
+        IntLiteral 0
+      WhileStmt
+        cond:
+          BinaryExpr '<'
+            VarRef 'i'
+            VarRef 'n'
+        body:
+          Block
+            AssignStmt 'total'
+              BinaryExpr '+'
+                VarRef 'total'
+                VarRef 'i'
+            AssignStmt 'i'
+              BinaryExpr '+'
+                VarRef 'i'
+                IntLiteral 1
+      ReturnStmt
+        VarRef 'total'
+  FunctionDecl 'main' -> int
+    Block
+      ExprStmt
+        CallExpr 'print_int'
+          CallExpr 'sum'
+            IntLiteral 100
+      ReturnStmt
+        IntLiteral 0
+=== stderr ===

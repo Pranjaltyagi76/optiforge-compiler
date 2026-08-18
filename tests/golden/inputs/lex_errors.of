@@ -1,0 +1,7 @@
+fn f() -> int {
+    int a = 1.2.3;
+    int b = 99999999999999999999;
+    int c = 1e;
+    int d = a # b;
+    return a;
+}

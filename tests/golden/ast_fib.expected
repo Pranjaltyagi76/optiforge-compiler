@@ -1,0 +1,35 @@
+=== exit ===
+0
+=== stdout ===
+Program
+  FunctionDecl 'fib' -> int
+    ParamDecl 'n' : int
+    Block
+      IfStmt
+        cond:
+          BinaryExpr '<'
+            VarRef 'n'
+            IntLiteral 2
+        then:
+          Block
+            ReturnStmt
+              VarRef 'n'
+      ReturnStmt
+        BinaryExpr '+'
+          CallExpr 'fib'
+            BinaryExpr '-'
+              VarRef 'n'
+              IntLiteral 1
+          CallExpr 'fib'
+            BinaryExpr '-'
+              VarRef 'n'
+              IntLiteral 2
+  FunctionDecl 'main' -> int
+    Block
+      ExprStmt
+        CallExpr 'print_int'
+          CallExpr 'fib'
+            IntLiteral 30
+      ReturnStmt
+        IntLiteral 0
+=== stderr ===

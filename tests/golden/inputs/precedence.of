@@ -1,0 +1,6 @@
+fn t() -> bool {
+    int a = 1 + 2 * 3 - 4 / 2 % 3;
+    bool b = 1 < 2 && 3 == 4 || !false;
+    int c = -a + -(3 * 2);
+    return b;
+}

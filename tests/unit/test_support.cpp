@@ -86,6 +86,24 @@ TEST("out-of-range queries are empty, not crashes") {
   CHECK(sm.isValid(f));
 }
 
+TEST("file contents keep a stable address as more files are added") {
+  // Token::lexeme and every diagnostic snippet are string_views into this
+  // storage. With a std::vector<Entry> backing store this failed: growth moved
+  // each Entry, and a short string carries its bytes inside the object, so its
+  // address changed and every outstanding view dangled.
+  SourceManager sm;
+  const FileID first = sm.addBuffer("a.of", "int x;");  // short enough for SSO
+  const char* before = sm.contents(first).data();
+
+  for (int i = 0; i < 64; ++i) {
+    sm.addBuffer("filler.of", "int y;");
+  }
+
+  CHECK_EQ(sm.contents(first).data(), before);
+  CHECK_EQ(std::string(sm.contents(first)), std::string("int x;"));
+  CHECK_EQ(std::string(sm.line(first, 1)), std::string("int x;"));
+}
+
 TEST("reading a nonexistent file fails cleanly") {
   SourceManager sm;
   CHECK(!sm.addFile("no/such/file/anywhere.of").has_value());
@@ -260,5 +278,3 @@ TEST("an empty source line is skipped rather than mis-rendered") {
 
   CHECK_EQ(out.str(), std::string("e.of:2:1: error: on a blank line\n"));
 }
-
-int main() { return optiforge::test::runAll(); }

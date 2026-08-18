@@ -1,0 +1,51 @@
+=== exit ===
+1
+=== stdout ===
+     1:1  kw_fn           'fn'
+     1:4  identifier      'f'
+     1:5  l_paren         '('
+     1:6  r_paren         ')'
+     1:8  arrow           '->'
+    1:11  kw_int          'int'
+    1:15  l_brace         '{'
+     2:5  kw_int          'int'
+     2:9  identifier      'a'
+    2:11  assign          '='
+    2:13  error           '1.2.3'
+    2:18  semicolon       ';'
+     3:5  kw_int          'int'
+     3:9  identifier      'b'
+    3:11  assign          '='
+    3:13  error           '99999999999999999999'
+    3:33  semicolon       ';'
+     4:5  kw_int          'int'
+     4:9  identifier      'c'
+    4:11  assign          '='
+    4:13  error           '1e'
+    4:15  semicolon       ';'
+     5:5  kw_int          'int'
+     5:9  identifier      'd'
+    5:11  assign          '='
+    5:13  identifier      'a'
+    5:15  error           '#'
+    5:17  identifier      'b'
+    5:18  semicolon       ';'
+     6:5  kw_return       'return'
+    6:12  identifier      'a'
+    6:13  semicolon       ';'
+     7:1  r_brace         '}'
+     8:1  eof             ''
+=== stderr ===
+tests/golden/inputs/lex_errors.of:2:13: error: invalid number literal '1.2.3'
+    int a = 1.2.3;
+            ^~~~~
+tests/golden/inputs/lex_errors.of:3:13: error: integer literal '99999999999999999999' is too large for type 'int'
+    int b = 99999999999999999999;
+            ^~~~~~~~~~~~~~~~~~~~
+tests/golden/inputs/lex_errors.of:4:13: error: exponent has no digits
+    int c = 1e;
+            ^~
+tests/golden/inputs/lex_errors.of:5:15: error: unexpected character '#'
+    int d = a # b;
+              ^
+4 errors generated.

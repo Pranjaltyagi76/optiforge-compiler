@@ -1,0 +1,40 @@
+=== exit ===
+0
+=== stdout ===
+Program
+  FunctionDecl 't' -> bool
+    Block
+      VarDeclStmt 'a' : int
+        BinaryExpr '-'
+          BinaryExpr '+'
+            IntLiteral 1
+            BinaryExpr '*'
+              IntLiteral 2
+              IntLiteral 3
+          BinaryExpr '%'
+            BinaryExpr '/'
+              IntLiteral 4
+              IntLiteral 2
+            IntLiteral 3
+      VarDeclStmt 'b' : bool
+        BinaryExpr '||'
+          BinaryExpr '&&'
+            BinaryExpr '<'
+              IntLiteral 1
+              IntLiteral 2
+            BinaryExpr '=='
+              IntLiteral 3
+              IntLiteral 4
+          UnaryExpr '!'
+            BoolLiteral false
+      VarDeclStmt 'c' : int
+        BinaryExpr '+'
+          UnaryExpr '-'
+            VarRef 'a'
+          UnaryExpr '-'
+            BinaryExpr '*'
+              IntLiteral 3
+              IntLiteral 2
+      ReturnStmt
+        VarRef 'b'
+=== stderr ===

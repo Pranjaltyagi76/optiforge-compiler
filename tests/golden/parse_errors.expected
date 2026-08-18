@@ -1,0 +1,14 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/parse_errors.of:2:13: error: expected an expression
+    int x = ;
+            ^
+tests/golden/inputs/parse_errors.of:3:14: error: expected ';' after variable declaration
+    int y = 5
+             ^
+tests/golden/inputs/parse_errors.of:11:17: error: expected a type name ('int', 'float', 'bool', or 'void')
+fn also_broken( -> int {
+                ^~
+3 errors generated.

@@ -1,0 +1,13 @@
+fn broken() -> int {
+    int x = ;
+    int y = 5
+    return x;
+}
+
+fn ok() -> int {
+    return 42;
+}
+
+fn also_broken( -> int {
+    return 1;
+}

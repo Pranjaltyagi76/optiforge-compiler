@@ -79,14 +79,16 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 1 — Lexer & Parser
 **Goal:** Source text → AST.
 
-- [ ] Token definition (`TokenKind` enum, `Token` struct with location + lexeme).
-- [ ] Hand-written lexer: keywords, identifiers, int/float literals, all operators, punctuation, `//` and `/* */` comments, whitespace, EOF.
-- [ ] Lexical error recovery (unterminated comment, bad character, malformed number).
-- [ ] AST node hierarchy (`Node` base, `Expr`/`Stmt`/`Decl` branches, `std::unique_ptr` children).
-- [ ] Recursive-descent parser with precedence climbing for binary expressions.
-- [ ] Grammar coverage: variable declarations, assignment, `if`/`else`, `while`, `return`, function declarations, calls, unary/binary expressions, literals, parenthesized expressions.
-- [ ] Parser error recovery (panic-mode sync on `;` and `}`) so multiple errors are reported per run.
-- [ ] `--emit=tokens` and `--emit=ast` (indented tree printer).
+- [x] Token definition (`TokenKind` enum, `Token` struct with location + lexeme).
+- [x] Hand-written lexer: keywords, identifiers, int/float literals, all operators, punctuation, `//` and `/* */` comments, whitespace, EOF.
+- [x] Lexical error recovery (unterminated comment, bad character, malformed number).
+- [x] AST node hierarchy (`Node` base, `Expr`/`Stmt`/`Decl` branches, `std::unique_ptr` children).
+- [x] Recursive-descent parser with precedence climbing for binary expressions.
+- [x] Grammar coverage: variable declarations, assignment, `if`/`else`, `while`, `return`, function declarations, calls, unary/binary expressions, literals, parenthesized expressions.
+- [x] Parser error recovery (panic-mode sync on `;` and `}`) so multiple errors are reported per run.
+- [x] `--emit=tokens` and `--emit=ast` (indented tree printer).
+
+**Status: COMPLETE** (verified: both examples parse, 79 unit tests + 15 golden cases green, clean -Werror build)
 
 **Exit criteria:** All `examples/*.of` parse; `tests/parser/` golden AST dumps pass; malformed inputs produce sensible, located diagnostics without crashing.
 
