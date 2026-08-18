@@ -1,0 +1,2 @@
+--emit=banana
+x.of

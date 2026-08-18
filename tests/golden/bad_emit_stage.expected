@@ -1,0 +1,6 @@
+=== exit ===
+2
+=== stdout ===
+=== stderr ===
+optiforge: error: unknown stage 'banana' for --emit
+  expected one of: tokens, ast, ir, cfg, asm, obj

@@ -13,8 +13,12 @@ CMakeFiles/
 *.exe
 *.out
 a.out
-optiforge
-optiforge.exe
+
+# Binaries built in-tree. These MUST stay anchored with a leading slash: a bare
+# "optiforge" pattern also matches the include/optiforge/ directory and would
+# silently exclude every header in the project.
+/optiforge
+/optiforge.exe
 
 # Profile data — machine- and workload-specific, regenerable.
 # Test fixtures under tests/pgo/fixtures/ must be force-added: git add -f

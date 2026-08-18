@@ -1,0 +1,14 @@
+// The Phase 4 milestone program: the first thing OptiForge must run correctly.
+// Expected output: 832040
+
+fn fib(int n) -> int {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() -> int {
+    print_int(fib(30));
+    return 0;
+}

@@ -1,0 +1,6 @@
+=== exit ===
+3
+=== stdout ===
+=== stderr ===
+optiforge: error: cannot open input file 'does_not_exist.of'
+1 error generated.

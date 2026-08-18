@@ -1,0 +1,19 @@
+# Normalize every text file to LF in the repository and in the working tree.
+#
+# This project is edited on Windows but targets Linux (context/deployment.md
+# section 2), so the same checkout may be built from both. Mixed line endings
+# would churn diffs, and golden-file tests compare output byte-for-byte.
+# Pinning LF everywhere removes the whole category of problem.
+* text=auto eol=lf
+
+# Golden test fixtures: preserve bytes exactly, no conversion of any kind.
+*.expected -text
+*.cmd      -text
+
+# Binaries
+*.png binary
+*.jpg binary
+*.pdf binary
+*.a   binary
+*.o   binary
+*.exe binary

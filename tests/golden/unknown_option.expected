@@ -1,0 +1,6 @@
+=== exit ===
+2
+=== stdout ===
+=== stderr ===
+optiforge: error: unknown option '--frobnicate'
+  try 'optiforge --help'

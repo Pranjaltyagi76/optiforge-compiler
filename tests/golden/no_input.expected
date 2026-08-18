@@ -1,0 +1,6 @@
+=== exit ===
+2
+=== stdout ===
+=== stderr ===
+optiforge: error: no input file
+  try 'optiforge --help'

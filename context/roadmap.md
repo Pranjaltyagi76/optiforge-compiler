@@ -63,12 +63,14 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 0 — Foundation & Tooling
 **Goal:** Nothing compiles yet, but everything is ready to.
 
-- [ ] Repo layout (`src/`, `include/`, `tests/`, `bench/`, `metrics/`, `examples/`, `context/`, `docs/`).
-- [ ] CMake build (C++20), warnings-as-errors, sanitizer build variants.
-- [ ] `optiforge` CLI skeleton — argument parsing, `--help`, `--version`, `--emit=`, `-O<n>`, `-o`.
-- [ ] Diagnostics engine: `SourceLocation`, `DiagnosticEngine`, severity levels, caret-underline rendering.
-- [ ] Test harness: golden-file runner comparing stage dumps (CTest driver).
-- [ ] `docs/` skeleton + this `context/` set committed.
+- [x] Repo layout (`src/`, `include/`, `tests/`, `bench/`, `metrics/`, `examples/`, `context/`, `docs/`).
+- [x] CMake build (C++20), warnings-as-errors, sanitizer build variants.
+- [x] `optiforge` CLI skeleton — argument parsing, `--help`, `--version`, `--emit=`, `-O<n>`, `-o`.
+- [x] Diagnostics engine: `SourceLocation`, `DiagnosticEngine`, severity levels, caret-underline rendering.
+- [x] Test harness: golden-file runner comparing stage dumps (CTest driver).
+- [x] `docs/` skeleton + this `context/` set committed.
+
+**Status: COMPLETE** (verified: clean build, `optiforge --version`, 2/2 test suites green)
 
 **Exit criteria:** `optiforge --version` runs; the test runner executes with zero tests and passes; a clean build produces no warnings.
 

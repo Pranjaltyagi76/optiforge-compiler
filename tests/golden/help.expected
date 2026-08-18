@@ -1,0 +1,24 @@
+=== exit ===
+0
+=== stdout ===
+OptiForge 0.1.0 - a profile-guided optimizing compiler
+
+usage: optiforge <input.of> [options]
+
+Output:
+  -o <file>            Write output to <file>
+  --emit=<stage>       Stop after <stage> and dump its result
+                       (tokens, ast, ir, cfg, asm, obj)
+
+Optimization:
+  -O0                  No optimization (default)
+  -O1                  Basic optimization
+  -O2                  Full optimization
+
+Diagnostics:
+  -Werror              Treat warnings as errors
+
+General:
+  -h, --help           Show this message
+      --version        Show the version
+=== stderr ===

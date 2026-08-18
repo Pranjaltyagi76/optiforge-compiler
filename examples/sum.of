@@ -1,0 +1,17 @@
+// The worked example used throughout System_design.md section 5.5.
+// Expected output: 4950
+
+fn sum(int n) -> int {
+    int total = 0;
+    int i = 0;
+    while (i < n) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    print_int(sum(100));
+    return 0;
+}
