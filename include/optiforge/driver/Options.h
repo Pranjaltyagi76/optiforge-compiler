@@ -24,6 +24,7 @@ enum class EmitStage {
   Ast,
   Ir,
   Cfg,
+  Analysis,
   Asm,
   Obj,
 };

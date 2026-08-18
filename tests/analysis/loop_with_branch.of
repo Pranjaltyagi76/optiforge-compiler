@@ -1,0 +1,16 @@
+// An if inside a loop, and a value live across the whole loop. Hand-check:
+// one loop containing both arms of the if; the block after the loop is not in
+// it; the slot holding `kept` is live in at every loop block.
+fn mixed(int n) -> int {
+    int kept = 7;
+    int total = 0;
+    while (n > 0) {
+        if (n > 5) { total = total + 2; } else { total = total + 1; }
+        n = n - 1;
+    }
+    return total + kept;
+}
+
+fn main() -> int {
+    return 0;
+}

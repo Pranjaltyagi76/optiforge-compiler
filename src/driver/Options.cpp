@@ -18,6 +18,8 @@ std::string_view toString(EmitStage stage) {
       return "ir";
     case EmitStage::Cfg:
       return "cfg";
+    case EmitStage::Analysis:
+      return "analysis";
     case EmitStage::Asm:
       return "asm";
     case EmitStage::Obj:
@@ -35,6 +37,8 @@ bool parseEmitStage(std::string_view name, EmitStage& out) {
     out = EmitStage::Ir;
   } else if (name == "cfg") {
     out = EmitStage::Cfg;
+  } else if (name == "analysis") {
+    out = EmitStage::Analysis;
   } else if (name == "asm") {
     out = EmitStage::Asm;
   } else if (name == "obj") {
@@ -87,7 +91,7 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       const std::string_view name = arg.substr(kEmitPrefix.size());
       if (!parseEmitStage(name, out.emit)) {
         err << "optiforge: error: unknown stage '" << name << "' for --emit\n"
-            << "  expected one of: tokens, ast, ir, cfg, asm, obj\n";
+            << "  expected one of: tokens, ast, ir, cfg, analysis, asm, obj\n";
         return false;
       }
       continue;

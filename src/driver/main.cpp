@@ -18,6 +18,7 @@
 #include "optiforge/ir/Printer.h"
 #include "optiforge/ir/Verifier.h"
 #include "optiforge/irgen/IRGen.h"
+#include "optiforge/analysis/AnalysisPrinter.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/TargetInfo.h"
 #include "optiforge/driver/Toolchain.h"
@@ -98,6 +99,10 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   }
   if (opts.emit == EmitStage::Cfg) {
     ir::printCFG(*module, std::cout);
+    return ExitCode::Success;
+  }
+  if (opts.emit == EmitStage::Analysis) {
+    analysis::printAnalyses(*module, std::cout);
     return ExitCode::Success;
   }
 

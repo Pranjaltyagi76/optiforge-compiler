@@ -1,0 +1,15 @@
+// One while loop. Hand-check: header while.cond.1 dominates body and exit;
+// the header is its own dominance frontier because of the back edge; the loop
+// has one latch, one exit, and entry serves as its preheader.
+fn count(int n) -> int {
+    int total = 0;
+    while (n > 0) {
+        total = total + n;
+        n = n - 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    return 0;
+}

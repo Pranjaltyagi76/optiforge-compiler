@@ -147,15 +147,17 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 ### Phase 5 — Analysis Framework
 **Goal:** Reusable, cached analyses that optimizations consume.
 
-- [ ] `AnalysisManager`: lazy computation, result caching, invalidation on IR mutation.
-- [ ] Dominator tree (Lengauer–Tarjan, or the iterative Cooper–Harvey–Kennedy algorithm).
-- [ ] Dominance frontiers (needed for SSA).
-- [ ] Post-dominator tree.
-- [ ] Natural loop detection via back edges; `LoopInfo` with nesting, headers, latches, exits, and preheader insertion.
-- [ ] Use-def and def-use chains.
-- [ ] Liveness analysis (backward dataflow, live-in/live-out per block).
-- [ ] Reaching definitions (forward dataflow).
-- [ ] A generic dataflow driver so future analyses are roughly 50 lines each.
+- [x] `AnalysisManager`: lazy computation, result caching, invalidation on IR mutation.
+- [x] Dominator tree (Lengauer–Tarjan, or the iterative Cooper–Harvey–Kennedy algorithm).
+- [x] Dominance frontiers (needed for SSA).
+- [x] Post-dominator tree.
+- [x] Natural loop detection via back edges; `LoopInfo` with nesting, headers, latches, exits, and preheader insertion.
+- [x] Use-def and def-use chains.
+- [x] Liveness analysis (backward dataflow, live-in/live-out per block).
+- [x] Reaching definitions (forward dataflow).
+- [x] A generic dataflow driver so future analyses are roughly 50 lines each.
+
+**Status: COMPLETE** (verified: 270 unit assertions, 28 golden cases including five hand-checked analysis dumps, 8 end-to-end programs at three optimization levels; clean -Werror build in Debug and Release. Preheader insertion is implemented as a transform, not an analysis, to respect rule 4.)
 
 **Exit criteria:** `tests/analysis/` golden dumps for dominator trees, loop nests, and live sets on hand-checked CFGs.
 

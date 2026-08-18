@@ -1,0 +1,63 @@
+=== exit ===
+0
+=== stdout ===
+function @count
+  dominator tree:
+    entry
+      while.cond.1
+        while.body.2
+        while.end.3
+  post-dominator tree:
+    <exit>
+      while.end.3
+        while.cond.1
+          entry
+          while.body.2
+  dominance frontiers:
+    entry: -
+    while.cond.1: while.cond.1
+    while.body.2: while.cond.1
+    while.end.3: -
+  loops:
+    loop header=while.cond.1 depth=1
+      latches:   while.body.2
+      blocks:    while.cond.1, while.body.2
+      exits:     while.end.3
+      preheader: entry
+  liveness:
+    entry:
+      in:  %n
+      out: %n.addr, %total.addr
+    while.cond.1:
+      in:  %n.addr, %total.addr
+      out: %n.addr, %total.addr
+    while.body.2:
+      in:  %n.addr, %total.addr
+      out: %n.addr, %total.addr
+    while.end.3:
+      in:  %total.addr
+      out: -
+  reaching definitions (stores):
+    entry: in=-  out=%n.addr@entry, %total.addr@entry
+    while.cond.1: in=%n.addr@entry, %total.addr@entry, %total.addr@while.body.2, %n.addr@while.body.2  out=%n.addr@entry, %total.addr@entry, %total.addr@while.body.2, %n.addr@while.body.2
+    while.body.2: in=%n.addr@entry, %total.addr@entry, %total.addr@while.body.2, %n.addr@while.body.2  out=%total.addr@while.body.2, %n.addr@while.body.2
+    while.end.3: in=%n.addr@entry, %total.addr@entry, %total.addr@while.body.2, %n.addr@while.body.2  out=%n.addr@entry, %total.addr@entry, %total.addr@while.body.2, %n.addr@while.body.2
+
+function @main
+  dominator tree:
+    entry
+  post-dominator tree:
+    <exit>
+      entry
+  dominance frontiers:
+    entry: -
+  loops:
+    none
+  liveness:
+    entry:
+      in:  -
+      out: -
+  reaching definitions (stores):
+    entry: in=-  out=-
+
+=== stderr ===

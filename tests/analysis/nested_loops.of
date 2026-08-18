@@ -1,0 +1,18 @@
+// Two nested loops. Hand-check: two loops, the inner one at depth 2 with the
+// outer as its parent, and every inner block also belongs to the outer loop.
+fn grid(int rows, int cols) -> int {
+    int total = 0;
+    while (rows > 0) {
+        int c = cols;
+        while (c > 0) {
+            total = total + 1;
+            c = c - 1;
+        }
+        rows = rows - 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    return 0;
+}

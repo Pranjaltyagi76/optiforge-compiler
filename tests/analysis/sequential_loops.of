@@ -1,0 +1,11 @@
+// Two loops one after the other. Hand-check: two separate top-level loops,
+// both at depth 1, neither containing the other.
+fn twice(int n) -> int {
+    while (n > 0) { n = n - 1; }
+    while (n < 10) { n = n + 1; }
+    return n;
+}
+
+fn main() -> int {
+    return 0;
+}

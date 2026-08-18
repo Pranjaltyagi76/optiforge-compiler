@@ -1,0 +1,59 @@
+=== exit ===
+0
+=== stdout ===
+function @diamond
+  dominator tree:
+    entry
+      if.then.1
+      if.else.2
+      if.end.3
+  post-dominator tree:
+    <exit>
+      if.end.3
+        entry
+        if.then.1
+        if.else.2
+  dominance frontiers:
+    entry: -
+    if.then.1: if.end.3
+    if.else.2: if.end.3
+    if.end.3: -
+  loops:
+    none
+  liveness:
+    entry:
+      in:  %n
+      out: %x.addr
+    if.then.1:
+      in:  %x.addr
+      out: %x.addr
+    if.else.2:
+      in:  %x.addr
+      out: %x.addr
+    if.end.3:
+      in:  %x.addr
+      out: -
+  reaching definitions (stores):
+    entry: in=-  out=%n.addr@entry, %x.addr@entry
+    if.then.1: in=%n.addr@entry, %x.addr@entry  out=%n.addr@entry, %x.addr@if.then.1
+    if.else.2: in=%n.addr@entry, %x.addr@entry  out=%n.addr@entry, %x.addr@if.else.2
+    if.end.3: in=%n.addr@entry, %x.addr@if.then.1, %x.addr@if.else.2  out=%n.addr@entry, %x.addr@if.then.1, %x.addr@if.else.2
+
+function @main
+  dominator tree:
+    entry
+  post-dominator tree:
+    <exit>
+      entry
+  dominance frontiers:
+    entry: -
+  loops:
+    none
+  liveness:
+    entry:
+      in:  -
+      out: -
+  reaching definitions (stores):
+    entry: in=-  out=-
+
+=== stderr ===

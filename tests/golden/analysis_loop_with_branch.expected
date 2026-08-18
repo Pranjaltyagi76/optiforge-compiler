@@ -1,0 +1,84 @@
+=== exit ===
+0
+=== stdout ===
+function @mixed
+  dominator tree:
+    entry
+      while.cond.1
+        while.body.2
+          if.then.4
+          if.else.5
+          if.end.6
+        while.end.3
+  post-dominator tree:
+    <exit>
+      while.end.3
+        while.cond.1
+          entry
+          if.end.6
+            while.body.2
+            if.then.4
+            if.else.5
+  dominance frontiers:
+    entry: -
+    while.cond.1: while.cond.1
+    while.body.2: while.cond.1
+    while.end.3: -
+    if.then.4: if.end.6
+    if.else.5: if.end.6
+    if.end.6: while.cond.1
+  loops:
+    loop header=while.cond.1 depth=1
+      latches:   if.end.6
+      blocks:    while.cond.1, while.body.2, if.then.4, if.else.5, if.end.6
+      exits:     while.end.3
+      preheader: entry
+  liveness:
+    entry:
+      in:  %n
+      out: %n.addr, %kept.addr, %total.addr
+    while.cond.1:
+      in:  %n.addr, %kept.addr, %total.addr
+      out: %n.addr, %kept.addr, %total.addr
+    while.body.2:
+      in:  %n.addr, %kept.addr, %total.addr
+      out: %n.addr, %kept.addr, %total.addr
+    while.end.3:
+      in:  %kept.addr, %total.addr
+      out: -
+    if.then.4:
+      in:  %n.addr, %kept.addr, %total.addr
+      out: %n.addr, %kept.addr, %total.addr
+    if.else.5:
+      in:  %n.addr, %kept.addr, %total.addr
+      out: %n.addr, %kept.addr, %total.addr
+    if.end.6:
+      in:  %n.addr, %kept.addr, %total.addr
+      out: %n.addr, %kept.addr, %total.addr
+  reaching definitions (stores):
+    entry: in=-  out=%n.addr@entry, %kept.addr@entry, %total.addr@entry
+    while.cond.1: in=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6
+    while.body.2: in=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6
+    while.end.3: in=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6
+    if.then.4: in=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%n.addr@entry, %kept.addr@entry, %total.addr@if.then.4, %n.addr@if.end.6
+    if.else.5: in=%n.addr@entry, %kept.addr@entry, %total.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%n.addr@entry, %kept.addr@entry, %total.addr@if.else.5, %n.addr@if.end.6
+    if.end.6: in=%n.addr@entry, %kept.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6  out=%kept.addr@entry, %total.addr@if.then.4, %total.addr@if.else.5, %n.addr@if.end.6
+
+function @main
+  dominator tree:
+    entry
+  post-dominator tree:
+    <exit>
+      entry
+  dominance frontiers:
+    entry: -
+  loops:
+    none
+  liveness:
+    entry:
+      in:  -
+      out: -
+  reaching definitions (stores):
+    entry: in=-  out=-
+
+=== stderr ===
