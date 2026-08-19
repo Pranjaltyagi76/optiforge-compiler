@@ -383,6 +383,33 @@ TEST("the SSA verifier accepts correctly promoted IR") {
   CHECK(c->ssaErrors().empty());
 }
 
+TEST("the structural verifier rejects a phi with the wrong arity") {
+  // The SSA verifier runs once, at the end of the pipeline. Phi arity is the
+  // invariant a CFG-editing pass is most likely to break, so the structural
+  // verifier checks it too -- that is what lets --verify-each name the pass
+  // responsible instead of blaming whatever ran last.
+  auto c = toSSA(
+      "fn f(int n) -> int { int t = 0; while (n > 0) { t = t + 1; n = n - 1; } return t; }");
+  ir::Function& fn = c->requireFunction("f");
+
+  for (const auto& block : fn.blocks()) {
+    bool done = false;
+    for (const auto& instruction : block->instructions()) {
+      if (instruction->opcode() == ir::Opcode::Phi) {
+        instruction->addIncoming(c->module->getInt(0), fn.entry());
+        done = true;
+        break;
+      }
+    }
+    if (done) {
+      break;
+    }
+  }
+
+  ir::Verifier verifier;
+  CHECK(!verifier.verify(fn));
+}
+
 TEST("the SSA verifier rejects a phi with the wrong arity") {
   auto c = toSSA(
       "fn f(int n) -> int { int t = 0; while (n > 0) { t = t + 1; n = n - 1; } return t; }");

@@ -211,6 +211,20 @@ void Instruction::removeIncoming(const BasicBlock* from) {
   }
 }
 
+void Instruction::removeOneIncoming(const BasicBlock* from) {
+  for (std::size_t i = 0; i < successors_.size(); ++i) {
+    if (successors_[i] != from) {
+      continue;
+    }
+    if (operands_[i] != nullptr) {
+      operands_[i]->removeUser(this);
+    }
+    operands_.erase(operands_.begin() + static_cast<std::ptrdiff_t>(i));
+    successors_.erase(successors_.begin() + static_cast<std::ptrdiff_t>(i));
+    return;
+  }
+}
+
 void Instruction::dropAllReferences() {
   for (Value*& operand : operands_) {
     if (operand != nullptr) {

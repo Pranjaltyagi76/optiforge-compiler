@@ -46,6 +46,7 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 | 5 | Analysis Framework | Dominators, loops, liveness, use-def, reaching defs | 2 weeks |
 | 6 | SSA Form | SSA construction + destruction, phi nodes | 2 weeks |
 | 7 | Classical Optimizations | CF, CP, DCE, CSE, copy prop, strength reduction, LICM | 3 weeks |
+| 7.5 | Correctness Sweep | Differential fuzzing; eight defects found and fixed | 0.5 week |
 | 8 | Real Register Allocation | Interference graph, graph coloring, spilling | 2.5 weeks |
 | 9 | Instrumentation & Runtime | `--profile` mode, counters, runtime library, `.prof` writer | 2 weeks |
 | 10 | Profile Ingestion & Hot-Path Detection | `.prof` parser, hot/warm/cold classification | 1.5 weeks |
@@ -191,7 +192,10 @@ Pass order (initial proposal, to be tuned):
 - [x] Dead code elimination (mark-and-sweep over SSA use lists). **Dead store elimination deferred** (OPT-13, priority S): mem2reg already removes the stores that matter, leaving nothing measurable for it to do.
 - [x] Strength reduction (`*2^k` → shift, `/2^k` → shift, `%2^k` → mask, `*2` → `x+x`).
 - [x] Loop-invariant code motion (uses `LoopInfo` and preheaders).
-- [x] CFG simplification (merge blocks, remove empty blocks, fold constant branches).
+- [x] CFG simplification: fold constant branches, prune unreachable blocks, and merge a
+      block into its only predecessor. **Threading an empty block with several
+      predecessors is not done** (OPT-14, priority S) -- it needs phi merging in every
+      predecessor and buys nothing the merge above does not already get.
 - [x] Static (non-PGO) function inlining, **restricted to single-block callees**, plus module-level removal of functions left uncalled.
 - [x] `-O0`/`-O1`/`-O2` pipeline definitions; `--print-after-all` for pass debugging.
 
@@ -203,10 +207,54 @@ Pass order (initial proposal, to be tuned):
 
 ---
 
+### Phase 7.5 — Correctness sweep before Phase 8
+**Goal:** Do not build a register allocator on top of a miscompiling optimizer.
+
+A review of Phases 3-7 plus a differential fuzzer -- random well-typed programs
+compiled at `-O0`/`-O1`/`-O2`, run, and compared against `-O0` -- turned up eight
+defects. Full write-up with the numbers:
+[`metrics/results/2026-08-19-pre-phase8-correctness-sweep.md`](../metrics/results/2026-08-19-pre-phase8-correctness-sweep.md).
+
+- [x] **SCCP tracked reachable blocks, not executable edges.** A phi in a block
+      already visited was never re-evaluated when its second predecessor came
+      alive, so it kept the value from the first edge. Miscompile.
+- [x] **SCCP left values at `Unknown` forever.** `bool == bool` is legal source its
+      evaluator declined to fold; the result never settled, a branch on it marked
+      neither successor executable, and both arms were deleted as dead. Miscompile.
+- [x] **Float comparison ignored NaN.** `comisd` sets ZF, PF and CF together for an
+      unordered pair, so `sete` could not tell "equal" from "unordered" and the
+      below family reported true where IEEE-754 says false.
+- [x] **Liveness charged phi operands to the wrong block.** They were added after
+      the backward walk, so a value was live across the block defining it --
+      exactly the over-approximation that gives Phase 8 interferences that are not
+      real.
+- [x] **`simplify-cfg` mishandled `condbr %c, X, X`**, dropping both of the block's
+      phi entries instead of the one edge that actually went away.
+- [x] **`insertLoopPreheaders` redirected edges without rewriting the header's
+      phis.** Now merges the incoming values, with a phi in the preheader when they
+      differ.
+- [x] **SSA destruction iterated an `unordered_map`**, making copy emission order --
+      and the temporary names that follow from it -- depend on heap addresses (NFR-06).
+- [x] **`--verify-each` did not check phi arity**, which is the invariant a
+      CFG-editing pass is most likely to break. Moved into `ir::Verifier` so the
+      pass responsible gets named.
+
+Three new differential programs (`bool_compare.of`, `loop_phi_edges.of`,
+`nan_compare.of`) and eight unit tests cover the lot.
+
+**Status: COMPLETE** (verified: 341 unit assertions, 32 golden cases, 39 end-to-end
+runs across three optimization levels, `--verify-each` clean on every test program,
+and ~400 fuzzer-generated programs with no divergence between levels. Metric O-04
+rose from 46.0% to 47.7%.)
+
+---
+
 ### Phase 8 — Real Register Allocation
 **Goal:** Replace the Phase-4 stack allocator with graph coloring.
 
-- [ ] Live-range construction from liveness.
+- [ ] Live-range construction from liveness. `Liveness` is edge-accurate as of
+      Phase 7.5: a phi operand is live out of the predecessor it arrives from and
+      nowhere else, which is the property live ranges have to be built on.
 - [ ] Interference graph construction.
 - [ ] Chaitin–Briggs coloring: simplify / coalesce / freeze / spill / select.
 - [ ] Spill code insertion with reload minimization; spill-cost heuristic using loop depth (and later, profile weight).
@@ -320,6 +368,8 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | ~~Target-OS mismatch~~ **RETIRED 2026-08-18** | — | — | Resolved: target is x86-64 Windows, Microsoft x64 ABI (ADR-10). Deviation from the brief is recorded and accepted; `TargetInfo` keeps a System V target open. |
 | Scope creep in the language (structs, pointers, generics) | High | High | The language is frozen at the agreed feature set until Phase 12 is complete. Phase 13 only. |
 | SSA construction/destruction bugs | High | Medium | Verifier after every pass; differential testing `-O0` vs `-On`; keep SSA behind a flag until stable |
+| An optimization miscompiles a shape nobody wrote a test for | High | **Realized in Phase 7.5** | Hand-written tests found none of the two miscompiles the differential fuzzer found in minutes. Fuzz before declaring a phase complete, not after. |
+| An optimistic analysis treats "not yet known" as "cannot happen" | High | **Realized in Phase 7.5** | Both SCCP miscompiles were this. Any lattice-based pass must guarantee every value leaves the bottom element, and every edge that can fire is eventually marked. |
 | No sanitizers on MinGW, so QA-07 cannot be met | Medium | Certain | Consequence of ADR-10. Memory bugs must be caught by design and review; Phase 3 found a teardown use-after-free by inspection, which is the standard this now requires. |
 | Register allocator miscompiles under pressure | High | Medium | Keep the Phase-4 stack allocator as a permanent fallback (`--regalloc=naive`); stress tests with more than 16 simultaneously live values |
 | Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme, source hash in the header, and a loud warning on mismatch (Phases 9–10) |

@@ -24,6 +24,7 @@
 #include "optiforge/irgen/IRGen.h"
 #include "optiforge/support/Diagnostic.h"
 #include "optiforge/support/SourceManager.h"
+#include "optiforge/transforms/SSA.h"
 
 using namespace optiforge;
 using namespace optiforge::analysis;
@@ -616,5 +617,101 @@ TEST("analyses handle deeply nested loops without blowing up") {
   std::sort(depths.begin(), depths.end());
   for (unsigned i = 0; i < 8; ++i) {
     CHECK_EQ(depths[i], i + 1);
+  }
+}
+
+TEST("a phi operand is live out of the edge it arrives on, not into its own block") {
+  // The classic register-allocator trap. A phi's operand is live at the end of
+  // the predecessor it comes from -- not at the top of the block holding the
+  // phi, and not at the top of the block that computes it. Adding phi operands
+  // after the backward walk, as this once did, made a value live across the
+  // whole block that defines it and produced interferences that are not real.
+  auto c = compile("fn f(int n) -> int { int t = 0; if (n > 0) { t = n + 1; } return t; }");
+  auto& fn = const_cast<ir::Function&>(c->requireFunction("f"));
+  transforms::promoteMemoryToRegisters(fn, c->manager);
+  c->manager.invalidateAll();
+
+  // The add feeding the phi is the only instruction in the then-block.
+  const ir::BasicBlock* then = c->block("f", "if.then.1");
+  const ir::Value* add = nullptr;
+  for (const auto& instruction : then->instructions()) {
+    if (instruction->opcode() == ir::Opcode::Add) {
+      add = instruction.get();
+    }
+  }
+  CHECK(add != nullptr);
+
+  const Liveness& live = c->manager.get<LivenessAnalysis>(fn);
+  CHECK(live.isLiveOut(then, add));    // the phi reads it on this edge
+  CHECK(!live.isLiveIn(then, add));    // but it is defined here, not before
+  CHECK(!live.isLiveIn(c->block("f", "if.end.2"), add));  // the phi is not a use here
+  CHECK(!live.isLiveOut(fn.entry(), add));
+}
+
+TEST("inserting a preheader merges the header's phi operands") {
+  // Several edges into the header become one, so the values they carried have
+  // to be merged a block earlier. Redirecting the edges and leaving the phis
+  // naming the old predecessors leaves IR no verifier accepts.
+  auto c = compile(
+      "fn f(int n) -> int { int t = 0;"
+      " while (n > 0) { t = t + 1; n = n - 1; } return t; }");
+  auto& fn = const_cast<ir::Function&>(c->requireFunction("f"));
+  transforms::promoteMemoryToRegisters(fn, c->manager);
+  c->manager.invalidateAll();
+
+  // Give the header a second entry edge so it no longer has a preheader: route
+  // the entry block through a diamond that rejoins at the loop header itself.
+  ir::BasicBlock* header = const_cast<ir::BasicBlock*>(c->block("f", "while.cond.1"));
+  ir::BasicBlock* bypass = fn.createBlock("bypass");
+  {
+    auto branch = std::make_unique<ir::Instruction>(ir::Opcode::Br, ir::Type::getVoid());
+    branch->addSuccessor(header);
+    bypass->append(std::move(branch));
+  }
+  ir::Instruction* entryTerm = fn.entry()->terminator();
+  auto condbr = std::make_unique<ir::Instruction>(ir::Opcode::CondBr, ir::Type::getVoid());
+  condbr->addOperand(c->module->getBool(true));
+  condbr->addSuccessor(header);
+  condbr->addSuccessor(bypass);
+  entryTerm->eraseFromParent();
+  fn.entry()->append(std::move(condbr));
+
+  // Both new edges need an entry in every header phi.
+  for (const auto& instruction : header->instructions()) {
+    if (instruction->opcode() != ir::Opcode::Phi) {
+      break;
+    }
+    ir::Value* fromEntry = nullptr;
+    for (std::size_t i = 0; i < instruction->incomingCount(); ++i) {
+      if (instruction->incomingBlock(i) == fn.entry()) {
+        fromEntry = instruction->operand(i);
+      }
+    }
+    instruction->addIncoming(fromEntry, bypass);
+  }
+  fn.recomputePredecessors();
+
+  ir::Verifier before;
+  if (!before.verify(fn)) {
+    std::ostringstream out;
+    before.printErrors(out);
+    ::optiforge::test::reportFailure(__FILE__, __LINE__,
+                                     "fixture is not valid IR: " + out.str());
+  }
+
+  CHECK_EQ(insertLoopPreheaders(fn), std::size_t{1});
+
+  ir::Verifier after;
+  if (!after.verify(fn)) {
+    std::ostringstream out;
+    after.printErrors(out);
+    ::optiforge::test::reportFailure(__FILE__, __LINE__,
+                                     "IR invalid after preheader insertion: " + out.str());
+  }
+
+  const DominatorTree tree(fn, false);
+  const LoopInfo loops(fn, tree);
+  for (const auto& loop : loops.allLoops()) {
+    CHECK(loop->preheader() != nullptr);
   }
 }

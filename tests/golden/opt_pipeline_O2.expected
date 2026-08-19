@@ -27,9 +27,6 @@ while.body.2:                                   ; preds = while.cond.1
   br while.cond.1
 
 while.end.3:                                    ; preds = while.cond.1
-  br if.end.5
-
-if.end.5:                                       ; preds = while.end.3
   ret i64 %t23
 }
 

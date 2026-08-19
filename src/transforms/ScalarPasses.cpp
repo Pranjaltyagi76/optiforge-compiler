@@ -179,6 +179,19 @@ private:
         if (a != nullptr && b != nullptr) {
           return module.getBool(compare(instruction.predicate(), a->value(), b->value()));
         }
+        // `bool == bool` and `bool != bool` are legal source, and the operands
+        // are ConstantBool rather than ConstantInt, so the integer path above
+        // never sees them.
+        const ir::ConstantBool* lhsBool = asBool(lhs);
+        const ir::ConstantBool* rhsBool = asBool(rhs);
+        if (lhsBool != nullptr && rhsBool != nullptr) {
+          if (instruction.predicate() == ir::Predicate::Eq) {
+            return module.getBool(lhsBool->value() == rhsBool->value());
+          }
+          if (instruction.predicate() == ir::Predicate::Ne) {
+            return module.getBool(lhsBool->value() != rhsBool->value());
+          }
+        }
         // A value always equals itself, whatever it is.
         if (lhs == rhs && lhs != nullptr) {
           switch (instruction.predicate()) {

@@ -63,6 +63,10 @@ bool operandIsByteSized(const char* mnemonic, std::size_t index) {
   if (std::strncmp(mnemonic, "movzb", 5) == 0) {
     return index == 0;
   }
+  // The byte-wise and/or that combine a setcc with its parity guard.
+  if (std::strcmp(mnemonic, "andb") == 0 || std::strcmp(mnemonic, "orb") == 0) {
+    return true;
+  }
   // A variable shift names its count register as %cl, never %rcx.
   if (std::strcmp(mnemonic, "shlq") == 0 || std::strcmp(mnemonic, "sarq") == 0) {
     return index == 0;

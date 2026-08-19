@@ -1,6 +1,7 @@
 #include "optiforge/analysis/Liveness.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "optiforge/analysis/Dataflow.h"
 #include "optiforge/ir/BasicBlock.h"
@@ -36,6 +37,35 @@ Liveness::Liveness(const ir::Function& function) {
     return it == valueIndex_.end() ? domainSize : it->second;
   };
 
+  // Values a successor's phi reads *along the edge from this block*.
+  //
+  // A phi's operand is live at the end of the predecessor it arrives from, and
+  // nowhere else. It is not live into the block holding the phi, and an operand
+  // arriving from a different predecessor is not live here at all. This set
+  // depends only on the CFG, so it is computed once rather than inside the
+  // fixed-point loop.
+  std::unordered_map<const ir::BasicBlock*, BitSet> phiUsesOnExit;
+  for (const auto& block : function.blocks()) {
+    BitSet uses(domainSize);
+    for (const ir::BasicBlock* successor : block->successors()) {
+      for (const auto& instruction : successor->instructions()) {
+        if (instruction->opcode() != ir::Opcode::Phi) {
+          break;  // phis are always first
+        }
+        for (std::size_t i = 0; i < instruction->incomingCount(); ++i) {
+          if (instruction->incomingBlock(i) != block.get()) {
+            continue;
+          }
+          const std::size_t index = indexOf(instruction->operand(i));
+          if (index < domainSize) {
+            uses.set(index);
+          }
+        }
+      }
+    }
+    phiUsesOnExit.emplace(block.get(), std::move(uses));
+  }
+
   const DataflowResult solved = runDataflow(
       function, Direction::Backward, domainSize, emptySet, emptySet,
       // Meet: a value is live out of a block if it is live into *any* successor.
@@ -45,6 +75,11 @@ Liveness::Liveness(const ir::Function& function) {
       // Transfer: walk the block backwards. live_in = use ∪ (live_out − def).
       [&](const ir::BasicBlock& block, const BitSet& liveOut, BitSet& liveIn) {
         liveIn = liveOut;
+        // Seeded *before* the backward walk, so a value defined in this block
+        // and read only by a successor's phi is killed by its own definition
+        // and does not leak into live-in. Adding these afterwards, as this once
+        // did, made every such value look live across its whole defining block.
+        liveIn.unionWith(phiUsesOnExit.at(&block));
 
         const auto& instructions = block.instructions();
         for (auto it = instructions.rbegin(); it != instructions.rend(); ++it) {
@@ -59,11 +94,8 @@ Liveness::Liveness(const ir::Function& function) {
             }
           }
 
-          // A phi's operands are live at the end of the *corresponding
-          // predecessor*, not at the top of this block. Treating them as used
-          // here would over-extend their live ranges and is the classic source
-          // of register-allocator miscompiles, so phis are skipped and handled
-          // below.
+          // A phi's operands belong to the incoming edges, not to the top of
+          // this block; they were accounted for in the predecessor above.
           if (instruction.opcode() == ir::Opcode::Phi) {
             continue;
           }
@@ -72,24 +104,6 @@ Liveness::Liveness(const ir::Function& function) {
             const std::size_t index = indexOf(instruction.operand(i));
             if (index < domainSize) {
               liveIn.set(index);
-            }
-          }
-        }
-
-        // Phi operands: live out of the predecessor they arrive from.
-        for (const ir::BasicBlock* successor : block.successors()) {
-          for (const auto& instruction : successor->instructions()) {
-            if (instruction->opcode() != ir::Opcode::Phi) {
-              break;  // phis are always first
-            }
-            // Without incoming-block metadata on phis (Phase 6 adds it), treat
-            // every operand as live out of every predecessor. Conservative,
-            // never wrong, and this branch is unreachable until phis exist.
-            for (std::size_t i = 0; i < instruction->operandCount(); ++i) {
-              const std::size_t index = indexOf(instruction->operand(i));
-              if (index < domainSize) {
-                liveIn.set(index);
-              }
             }
           }
         }
@@ -106,7 +120,12 @@ Liveness::Liveness(const ir::Function& function) {
   };
   for (const auto& block : function.blocks()) {
     in_[block.get()] = materialize(solved.in.at(block.get()));
-    out_[block.get()] = materialize(solved.out.at(block.get()));
+    // The solver's out set is the meet over successors' live-in, which by
+    // construction excludes phi operands; they are live on the edge out of this
+    // block, so they belong here too.
+    BitSet liveOut = solved.out.at(block.get());
+    liveOut.unionWith(phiUsesOnExit.at(block.get()));
+    out_[block.get()] = materialize(liveOut);
   }
 }
 

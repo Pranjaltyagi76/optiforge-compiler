@@ -1,0 +1,31 @@
+// A phi is only constant once *every* executable edge into its block has been
+// accounted for. SCCP tracked reachable blocks rather than executable edges, so
+// a block already visited was never revisited when its second predecessor came
+// alive, and a phi whose incoming values are two different constants kept the
+// first one it saw. The store inside the loop was simply dropped.
+//
+// EXPECT-OUTPUT: 28
+// EXPECT-OUTPUT: 1
+// EXPECT-OUTPUT: 5
+// EXPECT-OUTPUT: 12
+fn main() -> int {
+    int seed = 29;
+    int k = 0;
+    while (k < 1) {
+        seed = 28;
+        k = k + 1;
+    }
+    print_int(seed);
+    print_int(k);
+
+    // Two constants merging at a join the optimizer can reach both ways.
+    int n = 0;
+    int m = 4;
+    while (n < 2) {
+        if (n == 0) { m = 5; } else { m = 12; }
+        n = n + 1;
+    }
+    print_int(5);
+    print_int(m);
+    return 0;
+}

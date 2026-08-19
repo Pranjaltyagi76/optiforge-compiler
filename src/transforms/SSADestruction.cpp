@@ -205,8 +205,16 @@ std::size_t destroySSA(ir::Function& function) {
     }
   }
 
-  for (auto& [block, assignments] : pending) {
-    emitParallelCopy(*block, std::move(assignments));
+  // Walk the function's own block order rather than the map's. Iterating an
+  // unordered_map keyed by pointers makes the order the copies are emitted in
+  // -- and therefore the temporary names they are given -- depend on where the
+  // allocator happened to put the blocks, so the same source could compile to
+  // two different-looking outputs (NFR-06).
+  for (const auto& owner : function.blocks()) {
+    const auto it = pending.find(owner.get());
+    if (it != pending.end()) {
+      emitParallelCopy(*owner, std::move(it->second));
+    }
   }
 
   for (ir::Instruction* phi : phis) {

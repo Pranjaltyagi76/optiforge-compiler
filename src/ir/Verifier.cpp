@@ -139,6 +139,37 @@ void Verifier::checkFunction(const Function& function) {
         }
       }
 
+      // Phi arity is the invariant every CFG-editing pass is most likely to
+      // break, and breaking it silently gives a phi no value on some path in.
+      // Checking it here rather than only in the SSA verifier is what lets
+      // --verify-each name the pass that did it.
+      if (instruction->opcode() == Opcode::Phi) {
+        if (instruction->incomingCount() != instruction->operandCount()) {
+          report(context, "phi has " + std::to_string(instruction->operandCount()) +
+                              " operand(s) but " +
+                              std::to_string(instruction->incomingCount()) +
+                              " incoming block(s)");
+        }
+        if (instruction->incomingCount() != block->predecessors().size()) {
+          report(context, "phi has " + std::to_string(instruction->incomingCount()) +
+                              " incoming edge(s) but the block has " +
+                              std::to_string(block->predecessors().size()) +
+                              " predecessor(s)");
+        } else {
+          std::vector<const BasicBlock*> named;
+          for (std::size_t i = 0; i < instruction->incomingCount(); ++i) {
+            named.push_back(instruction->incomingBlock(i));
+          }
+          std::vector<const BasicBlock*> actual(block->predecessors().begin(),
+                                                block->predecessors().end());
+          std::sort(named.begin(), named.end());
+          std::sort(actual.begin(), actual.end());
+          if (named != actual) {
+            report(context, "phi's incoming blocks are not this block's predecessors");
+          }
+        }
+      }
+
       switch (instruction->opcode()) {
         case Opcode::Add:
         case Opcode::Sub:

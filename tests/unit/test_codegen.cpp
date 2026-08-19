@@ -212,11 +212,31 @@ TEST("integer comparison uses the signed setcc family") {
   CHECK(contains(assemblyFor("fn f(int a, int b) -> bool { return a <= b; }"), "setle"));
 }
 
-TEST("float comparison uses the unsigned setcc family, as comisd requires") {
-  CHECK(contains(assemblyFor("fn f(float a, float b) -> bool { return a < b; }"), "setb"));
+TEST("float comparison is false on NaN, which comisd's flags alone are not") {
+  // comisd sets ZF, PF and CF for an unordered pair, so the below family --
+  // setb, setbe -- reports true when either operand is NaN. IEEE-754 says every
+  // ordered predicate is false there, so `<` and `<=` compare the operands the
+  // other way round and read the above family instead.
+  const std::string less = assemblyFor("fn f(float a, float b) -> bool { return a < b; }");
+  CHECK(contains(less, "comisd"));
+  CHECK(contains(less, "seta"));
+  CHECK(!contains(less, "setb"));
+  CHECK(contains(assemblyFor("fn f(float a, float b) -> bool { return a <= b; }"), "setae"));
   CHECK(contains(assemblyFor("fn f(float a, float b) -> bool { return a > b; }"), "seta"));
   CHECK(contains(assemblyFor("fn f(float a, float b) -> bool { return a >= b; }"), "setae"));
-  CHECK(contains(assemblyFor("fn f(float a, float b) -> bool { return a < b; }"), "comisd"));
+
+  // Equality is the one pair the flags cannot express alone: ZF means "equal"
+  // and "unordered" both, so the parity flag has to be consulted as well.
+  const std::string equal = assemblyFor("fn f(float a, float b) -> bool { return a == b; }");
+  CHECK(contains(equal, "sete"));
+  CHECK(contains(equal, "setnp"));
+  CHECK(contains(equal, "andb"));
+
+  const std::string unequal =
+      assemblyFor("fn f(float a, float b) -> bool { return a != b; }");
+  CHECK(contains(unequal, "setne"));
+  CHECK(contains(unequal, "setp"));
+  CHECK(contains(unequal, "orb"));
 }
 
 TEST("setcc names an 8-bit register and movzb widens only its source") {

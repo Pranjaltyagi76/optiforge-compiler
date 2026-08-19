@@ -1,0 +1,44 @@
+// `bool == bool` and `bool != bool` are legal source, and their operands are
+// i1 constants rather than i64 ones. SCCP's evaluator declined to fold them and
+// left the result at Unknown forever, which is not the same as "not yet known":
+// a branch on an Unknown condition marked neither successor executable, so both
+// arms were proven dead and deleted, and phis merging into a live block silently
+// took the wrong value.
+//
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: 2
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 3
+// EXPECT-OUTPUT: 7
+fn main() -> int {
+    bool a = true;
+    bool b = false;
+    print_bool(a == b);
+    print_bool(a != b);
+
+    if (a == b) {
+        print_int(1);
+    } else {
+        print_int(2);
+    }
+
+    // The same condition inside a loop: the loop-carried values must survive.
+    int x = 0;
+    int i = 0;
+    while (i < 3) {
+        if (a == b) {
+            x = 1;
+        }
+        i = i + 1;
+    }
+    print_int(x);
+    print_int(i);
+
+    // A comparison between two variables, not two literals.
+    bool c = a;
+    int y = 0;
+    if (c == a) { y = 7; } else { y = 9; }
+    print_int(y);
+    return 0;
+}

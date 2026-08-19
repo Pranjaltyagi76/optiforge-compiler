@@ -1,4 +1,5 @@
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -40,10 +41,11 @@ public:
     module_ = function.parent();
     values_.clear();
     reachable_.clear();
+    executable_.clear();
     blockWorklist_.clear();
     valueWorklist_.clear();
 
-    markReachable(function.entry());
+    markEntry(function.entry());
     solve();
     return rewrite();
   }
@@ -88,11 +90,30 @@ private:
     }
   }
 
-  void markReachable(ir::BasicBlock* block) {
+  void markEntry(ir::BasicBlock* block) {
     if (block == nullptr || !reachable_.insert(block).second) {
       return;
     }
     blockWorklist_.push_back(block);
+  }
+
+  /// Marks the CFG edge `from -> to` executable.
+  ///
+  /// Edges, not blocks. A block already proven reachable may gain a *second*
+  /// executable predecessor later, and its phis must be re-evaluated when that
+  /// happens: a phi that looked constant because only one edge had fired is not
+  /// constant once the other does. Keying this on blocks alone silently kept
+  /// the first answer and dropped the value stored on the second path.
+  void markEdge(const ir::BasicBlock* from, ir::BasicBlock* to) {
+    if (to == nullptr || !executable_.insert({from, to}).second) {
+      return;
+    }
+    reachable_.insert(to);
+    blockWorklist_.push_back(to);
+  }
+
+  bool edgeIsExecutable(const ir::BasicBlock* from, const ir::BasicBlock* to) const {
+    return executable_.count({from, to}) != 0;
   }
 
   // --- Solver ---
@@ -124,7 +145,7 @@ private:
         return;
 
       case ir::Opcode::Br:
-        markReachable(instruction.successors()[0]);
+        markEdge(instruction.parent(), instruction.successors()[0]);
         return;
 
       case ir::Opcode::CondBr: {
@@ -135,12 +156,12 @@ private:
           // all -- the "conditional" in the pass's name.
           const bool taken =
               static_cast<const ir::ConstantBool*>(condition.constant)->value();
-          markReachable(instruction.successors()[taken ? 0 : 1]);
+          markEdge(instruction.parent(), instruction.successors()[taken ? 0 : 1]);
           return;
         }
         if (condition.state == State::Overdefined) {
-          markReachable(instruction.successors()[0]);
-          markReachable(instruction.successors()[1]);
+          markEdge(instruction.parent(), instruction.successors()[0]);
+          markEdge(instruction.parent(), instruction.successors()[1]);
         }
         return;
       }
@@ -153,14 +174,23 @@ private:
       return;
     }
 
-    // Anything the evaluator does not model is unknown, and stays that way.
     ir::Value* folded = evaluate(instruction);
     if (folded != nullptr) {
       update(&instruction, {State::Constant, folded});
-    } else if (anyOperandOverdefined(instruction) ||
-               !isFoldable(instruction.opcode())) {
-      update(&instruction, {State::Overdefined, nullptr});
+      return;
     }
+
+    // Nothing folded. Staying Unknown is only correct while an operand may
+    // still resolve; once every operand is settled and the evaluator still
+    // declines -- a comparison on booleans, a division by zero, an overflowing
+    // negation -- the value can never be proven constant and must go
+    // Overdefined. Leaving it Unknown is not conservative but *unsound*: a phi
+    // ignores an Unknown operand, and a branch on an Unknown condition marks
+    // neither successor executable, so live code is proven dead and deleted.
+    if (isFoldable(instruction.opcode()) && anyOperandUnknown(instruction)) {
+      return;
+    }
+    update(&instruction, {State::Overdefined, nullptr});
   }
 
   void visitPhi(ir::Instruction& phi) {
@@ -169,7 +199,7 @@ private:
       // An operand arriving along an edge that is not live contributes
       // nothing. This is what lets a phi stay constant when only one path
       // into the block is possible.
-      if (reachable_.count(phi.incomingBlock(i)) == 0) {
+      if (!edgeIsExecutable(phi.incomingBlock(i), phi.parent())) {
         continue;
       }
       const Lattice incoming = latticeOf(phi.operand(i));
@@ -190,9 +220,9 @@ private:
     update(&phi, result);
   }
 
-  bool anyOperandOverdefined(ir::Instruction& instruction) {
+  bool anyOperandUnknown(ir::Instruction& instruction) {
     for (std::size_t i = 0; i < instruction.operandCount(); ++i) {
-      if (latticeOf(instruction.operand(i)).state == State::Overdefined) {
+      if (latticeOf(instruction.operand(i)).state == State::Unknown) {
         return true;
       }
     }
@@ -226,10 +256,15 @@ private:
     std::vector<ir::Value*> constants;
     for (std::size_t i = 0; i < instruction.operandCount(); ++i) {
       const Lattice operand = latticeOf(instruction.operand(i));
-      if (operand.state != State::Constant) {
+      // A Constant entry always carries a value, but nothing in the type says
+      // so, and -O3 rightly flags every dereference below without this.
+      if (operand.state != State::Constant || operand.constant == nullptr) {
         return nullptr;
       }
       constants.push_back(operand.constant);
+    }
+    if (constants.empty()) {
+      return nullptr;  // no operands, nothing to evaluate
     }
 
     const auto intOf = [](ir::Value* value) {
@@ -239,6 +274,19 @@ private:
     if (instruction.opcode() == ir::Opcode::Not) {
       return module_->getBool(
           !static_cast<const ir::ConstantBool*>(constants[0])->value());
+    }
+    // `bool == bool` and `bool != bool` are legal source (language.md 3), so
+    // this is a comparison the evaluator really does meet.
+    if (instruction.opcode() == ir::Opcode::ICmp && constants.size() == 2 &&
+        constants[0]->valueKind() == ir::Value::Kind::ConstantBool &&
+        constants[1]->valueKind() == ir::Value::Kind::ConstantBool) {
+      const bool lhs = static_cast<const ir::ConstantBool*>(constants[0])->value();
+      const bool rhs = static_cast<const ir::ConstantBool*>(constants[1])->value();
+      switch (instruction.predicate()) {
+        case ir::Predicate::Eq: return module_->getBool(lhs == rhs);
+        case ir::Predicate::Ne: return module_->getBool(lhs != rhs);
+        default: return nullptr;  // sema permits no ordering on bool
+      }
     }
     if (constants[0]->valueKind() != ir::Value::Kind::ConstantInt) {
       return nullptr;
@@ -370,6 +418,8 @@ private:
   ir::Module* module_ = nullptr;
   std::unordered_map<ir::Value*, Lattice> values_;
   std::unordered_set<const ir::BasicBlock*> reachable_;
+  // Ordered so the solver's behaviour does not depend on heap addresses.
+  std::set<std::pair<const ir::BasicBlock*, const ir::BasicBlock*>> executable_;
   std::vector<ir::BasicBlock*> blockWorklist_;
   std::vector<ir::Instruction*> valueWorklist_;
 };

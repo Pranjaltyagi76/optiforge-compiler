@@ -31,6 +31,9 @@ public:
   bool run(ir::Function& function, analysis::AnalysisManager&) override {
     bool changed = foldConstantBranches(function);
     changed |= prune(function);
+    // After pruning, a block may be left as the only predecessor of its only
+    // successor, which is the shape merging removes.
+    changed |= mergeIntoPredecessors(function);
     return changed;
   }
 
@@ -54,12 +57,17 @@ private:
       ir::BasicBlock* dropped = terminator->successors()[taken ? 1 : 0];
 
       // The block no longer reaches `dropped`, so any phi there must lose the
-      // corresponding incoming edge or its arity stops matching.
-      if (dropped != target) {
-        for (const auto& instruction : dropped->instructions()) {
-          if (instruction->opcode() != ir::Opcode::Phi) {
-            break;
-          }
+      // corresponding incoming edge or its arity stops matching. When both arms
+      // lead to the same block the edge count drops from two to one, so exactly
+      // one entry goes -- removing every entry for this predecessor would leave
+      // the phi with no value on the edge that survives.
+      for (const auto& instruction : dropped->instructions()) {
+        if (instruction->opcode() != ir::Opcode::Phi) {
+          break;
+        }
+        if (dropped == target) {
+          instruction->removeOneIncoming(block.get());
+        } else {
           instruction->removeIncoming(block.get());
         }
       }
@@ -80,6 +88,94 @@ private:
 
   static bool prune(ir::Function& function) {
     return removeUnreachableBlocks(function) != 0;
+  }
+
+  /// Folds a block into its predecessor when control can only ever arrive one
+  /// way.
+  ///
+  /// `A: br B` where B has no other predecessor is a block boundary that means
+  /// nothing: the two always run together. Removing it shortens every later
+  /// walk over the CFG, removes a jump from the emitted code, and -- the reason
+  /// it matters most from Phase 8 on -- gives the register allocator one longer
+  /// straight-line region instead of two short ones.
+  static bool mergeIntoPredecessors(ir::Function& function) {
+    bool changed = false;
+
+    // One merge at a time: it removes a block, so the list being walked
+    // changes underneath. Restarting is cheap at the scale this compiler works
+    // at, and it keeps the predecessor lists trustworthy at every step.
+    bool progress = true;
+    while (progress) {
+      progress = false;
+      function.recomputePredecessors();
+
+      for (const auto& owner : function.blocks()) {
+        ir::BasicBlock* block = owner.get();
+        ir::Instruction* terminator = block->terminator();
+        if (terminator == nullptr || terminator->opcode() != ir::Opcode::Br) {
+          continue;
+        }
+
+        ir::BasicBlock* successor = terminator->successors()[0];
+        if (successor == block || successor == function.entry() ||
+            successor->predecessors().size() != 1 || successor->empty()) {
+          continue;
+        }
+
+        merge(function, *block, *successor);
+        progress = true;
+        changed = true;
+        break;
+      }
+    }
+
+    return changed;
+  }
+
+  /// Moves everything in `successor` into `block` and drops the now-empty
+  /// block. `successor` must have `block` as its only predecessor.
+  static void merge(ir::Function& function, ir::BasicBlock& block,
+                    ir::BasicBlock& successor) {
+    // A phi with a single predecessor is not a choice; it is its own operand.
+    while (!successor.instructions().empty() &&
+           successor.instructions().front()->opcode() == ir::Opcode::Phi) {
+      ir::Instruction* phi = successor.instructions().front().get();
+      if (phi->operandCount() == 1) {
+        phi->replaceAllUsesWith(phi->operand(0));
+      }
+      phi->eraseFromParent();
+    }
+
+    // The jump between the two is what disappears.
+    block.terminator()->eraseFromParent();
+
+    std::vector<ir::Instruction*> moving;
+    moving.reserve(successor.instructions().size());
+    for (const auto& instruction : successor.instructions()) {
+      moving.push_back(instruction.get());
+    }
+    for (ir::Instruction* instruction : moving) {
+      // insertBefore(.., nullptr) appends without touching CFG edges; the
+      // predecessor lists are rebuilt below, once, from the terminators.
+      block.insertBefore(successor.detach(instruction), nullptr);
+    }
+
+    // Phis further downstream named the block that just vanished.
+    for (ir::BasicBlock* downstream : block.successors()) {
+      for (const auto& instruction : downstream->instructions()) {
+        if (instruction->opcode() != ir::Opcode::Phi) {
+          break;
+        }
+        for (std::size_t i = 0; i < instruction->incomingCount(); ++i) {
+          if (instruction->incomingBlock(i) == &successor) {
+            instruction->setSuccessor(i, &block);
+          }
+        }
+      }
+    }
+
+    function.recomputePredecessors();
+    function.pruneUnreachableBlocks();  // the emptied block is now unreachable
   }
 };
 

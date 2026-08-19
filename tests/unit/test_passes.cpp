@@ -84,6 +84,12 @@ struct Optimized {
   bool has(const std::string& needle) const {
     return ir().find(needle) != std::string::npos;
   }
+
+  std::vector<std::string> ssaErrors() {
+    manager.invalidateAll();
+    return module == nullptr ? std::vector<std::string>{}
+                             : analysis::verifySSA(*module, manager);
+  }
 };
 
 /// Compiles, promotes to SSA, then runs one named pass to a fixed point.
@@ -523,4 +529,60 @@ TEST("optimization is deterministic") {
     return r->ir();
   };
   CHECK_EQ(run(), run());
+}
+
+// ---------------------------------------------------------------------------
+// Regressions
+// ---------------------------------------------------------------------------
+
+TEST("sccp re-evaluates a phi when its second edge becomes executable") {
+  // The loop body runs, so the store inside it reaches the exit. Tracking
+  // reachable *blocks* rather than executable *edges* meant the phi in the
+  // already-visited header was never revisited when the latch came alive, and
+  // it kept the value from the entry edge.
+  auto r = runPass("sccp",
+                   "fn f() -> int { int seed = 29; int k = 0;"
+                   " while (k < 1) { seed = 28; k = k + 1; } return seed; }");
+  CHECK(r->valid());
+  CHECK(!r->has("ret i64 29"));
+}
+
+TEST("sccp settles a value its evaluator cannot fold") {
+  // `bool == bool` is legal source the evaluator declines to fold. Leaving it
+  // Unknown is unsound rather than conservative: neither successor of a branch
+  // on an Unknown condition is marked executable, so both arms look dead.
+  auto r = runPass("sccp",
+                   "fn f() -> int { bool a = true; bool b = false;"
+                   " if (a == b) { return 1; } return 2; }");
+  CHECK(r->valid());
+  CHECK(r->has("ret i64 2"));
+  CHECK(r->ssaErrors().empty());
+}
+
+TEST("constant folding evaluates comparisons between booleans") {
+  CHECK(runPass("constant-folding", "fn f() -> bool { bool a = true; return a == false; }")
+            ->has("ret i1 false"));
+  CHECK(runPass("constant-folding", "fn f() -> bool { bool a = true; return a != false; }")
+            ->has("ret i1 true"));
+}
+
+TEST("simplify-cfg merges a block into its only predecessor") {
+  // `A: br B` where B has no other predecessor is a block boundary that means
+  // nothing; leaving it costs a jump and splits what the register allocator
+  // sees into two shorter regions.
+  auto r = runPass("simplify-cfg",
+                   "fn f(int n) -> int { int t = 0; if (true) { t = n + 1; } return t; }");
+  CHECK(r->valid());
+  CHECK_EQ(r->requireFunction("f").blocks().size(), std::size_t{1});
+  CHECK(r->ssaErrors().empty());
+}
+
+TEST("simplify-cfg leaves a real join alone") {
+  auto r = runPass("simplify-cfg",
+                   "fn f(int n) -> int { int t = 0;"
+                   " if (n > 0) { t = 1; } else { t = 2; } return t; }");
+  CHECK(r->valid());
+  // entry, then, else and the join: nothing here may be merged away.
+  CHECK_EQ(r->requireFunction("f").blocks().size(), std::size_t{4});
+  CHECK(r->ssaErrors().empty());
 }

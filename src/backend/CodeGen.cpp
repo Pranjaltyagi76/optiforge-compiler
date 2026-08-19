@@ -44,16 +44,29 @@ const char* setccForInt(Predicate predicate) {
 
 /// comisd sets the flags as an *unsigned* comparison would, so the float forms
 /// are the above/below family rather than the greater/less one.
+///
+/// It also sets ZF, PF and CF all to 1 when either operand is NaN, which makes
+/// the below/below-or-equal forms report true for an unordered pair. IEEE-754
+/// says every ordered predicate is false there, so `<` and `<=` are emitted by
+/// comparing the other way round and using the above forms, which read CF=0 and
+/// are correctly false when unordered. See setccForFloat's callers.
 const char* setccForFloat(Predicate predicate) {
   switch (predicate) {
     case Predicate::Eq: return "sete";
     case Predicate::Ne: return "setne";
-    case Predicate::Lt: return "setb";
+    // Emitted against reversed operands, hence "above" for a less-than.
+    case Predicate::Lt: return "seta";
     case Predicate::Gt: return "seta";
-    case Predicate::Le: return "setbe";
+    case Predicate::Le: return "setae";
     case Predicate::Ge: return "setae";
   }
   return "sete";
+}
+
+/// True for the predicates whose operands must be compared in reverse so the
+/// unordered case falls out false.
+bool floatCompareReversesOperands(Predicate predicate) {
+  return predicate == Predicate::Lt || predicate == Predicate::Le;
 }
 
 std::uint64_t bitsOf(double value) {
@@ -334,24 +347,48 @@ void CodeGen::lowerDivRem(const ir::Instruction& instruction, bool wantRemainder
 }
 
 void CodeGen::lowerCompare(const ir::Instruction& instruction, bool isFloat) {
-  if (isFloat) {
-    const MReg lhs = target_.scratchFloat0();
-    const MReg rhs = target_.scratchFloat1();
-    loadFloat(instruction.operand(0), lhs);
-    loadFloat(instruction.operand(1), rhs);
-    emit("comisd", {MOperand::makeReg(rhs), MOperand::makeReg(lhs)});
-  } else {
+  const Predicate predicate = instruction.predicate();
+  const MReg result = target_.scratchInt0();
+
+  if (!isFloat) {
     const MReg lhs = target_.scratchInt0();
     const MReg rhs = target_.scratchInt1();
     loadInt(instruction.operand(0), lhs);
     loadInt(instruction.operand(1), rhs);
     emit("cmpq", {MOperand::makeReg(rhs), MOperand::makeReg(lhs)});
+    emit(setccForInt(predicate), {MOperand::makeReg(result, true)}, "8-bit form");
+    emit("movzbq", {MOperand::makeReg(result), MOperand::makeReg(result, true)});
+    storeResult(instruction, result);
+    return;
   }
 
-  const MReg result = target_.scratchInt0();
-  emit(isFloat ? setccForFloat(instruction.predicate())
-               : setccForInt(instruction.predicate()),
-       {MOperand::makeReg(result, true)}, "8-bit form");
+  const MReg first = target_.scratchFloat0();
+  const MReg second = target_.scratchFloat1();
+  loadFloat(instruction.operand(0), first);
+  loadFloat(instruction.operand(1), second);
+
+  // `comisd b, a` sets the flags for `a ? b`. For < and <= the operands are
+  // swapped so the above-family condition can be used, which is false when
+  // either operand is NaN -- as IEEE-754 requires and as the below family is
+  // not.
+  if (floatCompareReversesOperands(predicate)) {
+    emit("comisd", {MOperand::makeReg(first), MOperand::makeReg(second)});
+  } else {
+    emit("comisd", {MOperand::makeReg(second), MOperand::makeReg(first)});
+  }
+
+  emit(setccForFloat(predicate), {MOperand::makeReg(result, true)}, "8-bit form");
+
+  // Equality is the one pair the flags alone cannot express: comisd sets ZF for
+  // "equal" *and* for "unordered", so PF has to be consulted as well.
+  if (predicate == Predicate::Eq || predicate == Predicate::Ne) {
+    const MReg parity = target_.scratchInt1();
+    emit(predicate == Predicate::Eq ? "setnp" : "setp",
+         {MOperand::makeReg(parity, true)}, "NaN is unordered, not equal");
+    emit(predicate == Predicate::Eq ? "andb" : "orb",
+         {MOperand::makeReg(parity), MOperand::makeReg(result, true)});
+  }
+
   emit("movzbq", {MOperand::makeReg(result), MOperand::makeReg(result, true)});
   storeResult(instruction, result);
 }

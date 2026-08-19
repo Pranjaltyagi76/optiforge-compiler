@@ -1,0 +1,36 @@
+// comisd sets ZF, PF and CF all together when either operand is NaN, so the
+// below family (setb/setbe) reports true for a pair IEEE-754 says compares
+// false, and sete cannot tell "equal" from "unordered" at all.
+//
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: false
+fn main() -> int {
+    float zero = 0.0;
+    float nan = zero / zero;
+
+    print_bool(nan == nan);
+    print_bool(nan != nan);
+    print_bool(nan < 1.0);
+    print_bool(nan > 1.0);
+    print_bool(nan <= 1.0);
+    print_bool(nan >= 1.0);
+
+    // Ordered pairs must still answer the ordinary way.
+    print_bool(1.0 < 2.0);
+    print_bool(2.0 < 1.0);
+    print_bool(1.0 <= 1.0);
+    print_bool(2.0 >= 1.0);
+    print_bool(1.0 == 1.0);
+    print_bool(1.0 != 1.0);
+    return 0;
+}

@@ -1,7 +1,9 @@
 #include "optiforge/analysis/LoopInfo.h"
 
 #include <algorithm>
+#include <memory>
 #include <unordered_set>
+#include <utility>
 
 #include "optiforge/analysis/Dominators.h"
 #include "optiforge/ir/BasicBlock.h"
@@ -173,6 +175,65 @@ LoopInfo LoopAnalysis::run(const ir::Function& function, AnalysisManager& manage
 // Preheader insertion (a transform, not an analysis)
 // ---------------------------------------------------------------------------
 
+namespace {
+
+/// Collapses a header phi's incoming edges from `outside` into a single edge
+/// from `preheader`.
+///
+/// When every one of those edges carried the same value there is nothing to
+/// merge and the value moves across unchanged. When they differ, the choice
+/// they used to express still has to be made -- one block earlier, by a phi in
+/// the preheader.
+void rerouteHeaderPhis(ir::BasicBlock& header,
+                       const std::vector<ir::BasicBlock*>& outside,
+                       ir::BasicBlock& preheader) {
+  const std::unordered_set<const ir::BasicBlock*> fromOutside(outside.begin(),
+                                                              outside.end());
+
+  for (const auto& instruction : header.instructions()) {
+    if (instruction->opcode() != ir::Opcode::Phi) {
+      break;  // phis lead the block
+    }
+
+    std::vector<std::pair<ir::Value*, ir::BasicBlock*>> incoming;
+    for (std::size_t i = 0; i < instruction->incomingCount(); ++i) {
+      ir::BasicBlock* from = instruction->incomingBlock(i);
+      if (fromOutside.count(from) != 0) {
+        incoming.push_back({instruction->operand(i), from});
+      }
+    }
+    if (incoming.empty()) {
+      continue;
+    }
+
+    bool uniform = true;
+    for (const auto& entry : incoming) {
+      if (entry.first != incoming.front().first) {
+        uniform = false;
+        break;
+      }
+    }
+
+    ir::Value* merged = incoming.front().first;
+    if (!uniform) {
+      auto phi = std::make_unique<ir::Instruction>(ir::Opcode::Phi,
+                                                   instruction->type());
+      phi->setName(header.parent()->nextTempName());
+      for (const auto& entry : incoming) {
+        phi->addIncoming(entry.first, entry.second);
+      }
+      merged = preheader.insertAtTop(std::move(phi));
+    }
+
+    for (const auto& entry : incoming) {
+      instruction->removeOneIncoming(entry.second);
+    }
+    instruction->addIncoming(merged, &preheader);
+  }
+}
+
+}  // namespace
+
 std::size_t insertLoopPreheaders(ir::Function& function) {
   if (function.blocks().empty()) {
     return 0;
@@ -211,6 +272,14 @@ std::size_t insertLoopPreheaders(ir::Function& function) {
                                                       ir::Type::getVoid());
       branch->addSuccessor(header);
       preheader->append(std::move(branch));
+
+      // The header's phis must be rewritten before the edges move. Several
+      // incoming edges are about to become one, so the values they carried have
+      // to be merged somewhere -- and the only place that can happen is a phi in
+      // the preheader itself. Leaving the phis alone, as this once did, left
+      // them naming predecessors that no longer reach the header and with an
+      // arity the verifier rejects.
+      rerouteHeaderPhis(*header, outside, *preheader);
 
       // Redirect every outside edge through the new block.
       for (ir::BasicBlock* predecessor : outside) {

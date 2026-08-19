@@ -87,6 +87,11 @@ public:
   /// matching the predecessor list.
   void removeIncoming(const BasicBlock* from);
 
+  /// Drops a *single* edge arriving from `from`. A terminator whose two
+  /// successors are the same block contributes two predecessor entries and two
+  /// phi operands; folding it to one branch removes one of each, not both.
+  void removeOneIncoming(const BasicBlock* from);
+
   // --- Terminator successors ---
   const std::vector<BasicBlock*>& successors() const { return successors_; }
   void addSuccessor(BasicBlock* block) { successors_.push_back(block); }
