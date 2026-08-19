@@ -416,6 +416,20 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::Sub: lowerBinaryInt(instruction, "subq"); break;
     case Opcode::Mul: lowerBinaryInt(instruction, "imulq"); break;
     case Opcode::SDiv: lowerDivRem(instruction, /*wantRemainder=*/false); break;
+
+    case Opcode::Shl:
+    case Opcode::AShr: {
+      // x86-64 takes a variable shift count only in cl, so the amount cannot
+      // be placed freely the way an ordinary binary operand can.
+      const MReg value = target_.scratchInt0();
+      loadInt(instruction.operand(0), value);
+      loadInt(instruction.operand(1), MReg::RCX);
+      emit(instruction.opcode() == Opcode::Shl ? "shlq" : "sarq",
+           {MOperand::makeReg(MReg::RCX), MOperand::makeReg(value, true)},
+           "shift count must be in cl");
+      storeResult(instruction, value);
+      break;
+    }
     case Opcode::SRem: lowerDivRem(instruction, /*wantRemainder=*/true); break;
 
     case Opcode::FAdd: lowerBinaryFloat(instruction, "addsd"); break;

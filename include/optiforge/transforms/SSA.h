@@ -61,4 +61,26 @@ std::size_t splitCriticalEdges(ir::Function& function);
 std::size_t destroySSA(ir::Function& function);
 std::size_t destroySSA(ir::Module& module);
 
+/// Removes functions nothing calls.
+///
+/// A module-level operation, so it does not fit the per-function Pass
+/// interface. It exists because inlining leaves the original behind: after
+/// every call site has been inlined, the callee is dead weight that no
+/// function-scoped pass can see, and static instruction counts at -O2 were
+/// *worse* than at -O1 until this ran.
+///
+/// Safe because this language cannot take the address of a function, so a
+/// function with no callers is genuinely unreachable. `main` is always kept.
+///
+/// Returns the number of functions removed.
+std::size_t removeUnusedFunctions(ir::Module& module);
+
+/// Removes blocks the entry can no longer reach, first dropping their edges
+/// from the phis of blocks that survive.
+///
+/// Every pass must leave the IR valid on its own: the verifier runs after each
+/// one under --verify-each, and leaving cleanup to a later pass means the
+/// pipeline is briefly in a state no verifier would accept.
+std::size_t removeUnreachableBlocks(ir::Function& function);
+
 }  // namespace optiforge::transforms

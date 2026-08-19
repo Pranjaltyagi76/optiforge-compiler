@@ -21,6 +21,7 @@
 #include "optiforge/analysis/AnalysisManager.h"
 #include "optiforge/analysis/AnalysisPrinter.h"
 #include "optiforge/analysis/SSAVerifier.h"
+#include "optiforge/passes/Pass.h"
 #include "optiforge/transforms/SSA.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/TargetInfo.h"
@@ -30,7 +31,30 @@
 
 using namespace optiforge;
 
+namespace optiforge::transforms {
+// Each transform registers itself at load time. These anchors are referenced
+// below so the linker keeps those translation units: without them a static
+// library drops any object whose symbols nobody names, taking the
+// registrations with it.
+void anchorScalarPasses();
+void anchorSCCP();
+void anchorGVN();
+void anchorLICM();
+void anchorSimplifyCFG();
+void anchorInline();
+}  // namespace optiforge::transforms
+
 namespace {
+
+void keepPassRegistrations() {
+  transforms::anchorScalarPasses();
+  transforms::anchorSCCP();
+  transforms::anchorGVN();
+  transforms::anchorLICM();
+  transforms::anchorSimplifyCFG();
+  transforms::anchorInline();
+}
+
 
 ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticEngine& diags) {
   const std::optional<FileID> file = sources.addFile(opts.inputPath);
@@ -110,6 +134,27 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
       verifier.printErrors(std::cerr);
       return ExitCode::InternalError;
     }
+    // --- Optimization pipeline ---
+    passes::PassManager pipeline;
+    passes::buildPipeline(pipeline, opts.optLevel, opts.disabledPasses);
+    pipeline.setPrintAfterAll(opts.printAfterAll);
+    pipeline.setPrintAfter(opts.printAfter);
+    pipeline.setVerifyEach(opts.verifyEach);
+    pipeline.run(*module, analyses);
+
+    // Module-level cleanup: inlining leaves the original behind, and no
+    // function-scoped pass can see that nothing calls it any more.
+    if (opts.optLevel >= 2) {
+      transforms::removeUnusedFunctions(*module);
+    }
+
+    if (!verifier.verify(*module)) {
+      diags.reportGlobal(DiagSeverity::Error,
+                         "internal compiler error: IR invalid after optimization");
+      verifier.printErrors(std::cerr);
+      return ExitCode::InternalError;
+    }
+
     const std::vector<std::string> ssaErrors =
         analysis::verifySSA(*module, analyses);
     if (!ssaErrors.empty()) {
@@ -223,6 +268,8 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
 int main(int argc, char** argv) {
   // Recorded so the runtime library can be found relative to this executable.
   Toolchain::setExecutablePath(argv[0]);
+
+  keepPassRegistrations();
 
   Options opts;
   if (!parseOptions(argc, argv, opts, std::cerr)) {

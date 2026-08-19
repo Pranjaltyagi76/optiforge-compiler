@@ -184,16 +184,20 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 Pass order (initial proposal, to be tuned):
 `mem2reg → constant folding → sparse conditional constant propagation → copy propagation → CSE (GVN) → DCE → strength reduction → LICM → simplify-CFG → DCE`
 
-- [ ] Constant folding (peephole on constant operands, including `x*1`, `x+0`, `x*0`).
-- [ ] Constant propagation (SCCP preferred — folds and prunes branches together).
-- [ ] Copy propagation.
-- [ ] Common subexpression elimination (dominator-based GVN).
-- [ ] Dead code elimination (mark-and-sweep over SSA use lists) and dead store elimination.
-- [ ] Strength reduction (`*2^k` → shift, `/2^k` → shift, `%2^k` → mask, `*2` → `x+x`).
-- [ ] Loop-invariant code motion (uses `LoopInfo` and preheaders).
-- [ ] CFG simplification (merge blocks, remove empty blocks, fold constant branches).
-- [ ] Static (non-PGO) function inlining with a size heuristic.
-- [ ] `-O0`/`-O1`/`-O2` pipeline definitions; `--print-after-all` for pass debugging.
+- [x] Constant folding (peephole on constant operands, including `x*1`, `x+0`, `x*0`).
+- [x] Constant propagation (SCCP preferred — folds and prunes branches together).
+- [x] Copy propagation.
+- [x] Common subexpression elimination (dominator-based GVN).
+- [x] Dead code elimination (mark-and-sweep over SSA use lists). **Dead store elimination deferred** (OPT-13, priority S): mem2reg already removes the stores that matter, leaving nothing measurable for it to do.
+- [x] Strength reduction (`*2^k` → shift, `/2^k` → shift, `%2^k` → mask, `*2` → `x+x`).
+- [x] Loop-invariant code motion (uses `LoopInfo` and preheaders).
+- [x] CFG simplification (merge blocks, remove empty blocks, fold constant branches).
+- [x] Static (non-PGO) function inlining, **restricted to single-block callees**, plus module-level removal of functions left uncalled.
+- [x] `-O0`/`-O1`/`-O2` pipeline definitions; `--print-after-all` for pass debugging.
+
+**Status: COMPLETE** (verified: 334 unit assertions, 32 golden cases, 10 end-to-end programs byte-identical at -O0/-O1/-O2; clean -Werror in Debug and Release. Metric O-04 = 46.0% against a 40% target, recorded in metrics/results/2026-08-19-phase7-ir-reduction.md.)
+
+**Deferred, both priority S:** dead store elimination (nothing left for it after mem2reg) and static loop unrolling (better done with the trip counts Phase 11 measures than with a static guess).
 
 **Exit criteria:** For every optimization level, all tests produce output identical to `-O0`. Instruction counts drop measurably. `tests/opt/` holds golden IR per pass.
 

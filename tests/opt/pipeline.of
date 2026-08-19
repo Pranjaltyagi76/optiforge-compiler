@@ -1,0 +1,22 @@
+// Every -O2 pass in one program. Hand-check against --emit=ir -O2:
+//   limit = 10*4 and scale = limit*2 fold to the constant 80
+//   n * 8 becomes a shift
+//   the cube is dead and disappears
+//   if (2 > 3) folds away, taking its block with it
+//   add(total, 0) inlines, then the +0 folds, leaving a bare ret
+//   `add` itself is then uncalled and removed
+fn add(int a, int b) -> int { return a + b; }
+fn work(int n) -> int {
+    int limit = 10 * 4;
+    int total = 0;
+    while (n > 0) {
+        int scale = limit * 2;
+        total = total + scale;
+        total = total + (n * 8);
+        int unused = n * n * n;
+        n = n - 1;
+    }
+    if (2 > 3) { total = 999; }
+    return add(total, 0);
+}
+fn main() -> int { print_int(work(3)); return 0; }

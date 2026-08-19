@@ -182,6 +182,35 @@ void Instruction::addIncoming(Value* value, BasicBlock* from) {
   successors_.push_back(from);
 }
 
+void Instruction::moveBefore(BasicBlock& block, Instruction* before) {
+  // detach() hands back ownership. Discarding the returned unique_ptr would
+  // destroy this instruction at the end of the statement and leave the
+  // reinsertion below operating on freed memory -- which is exactly what it
+  // did, corrupting the heap.
+  std::unique_ptr<Instruction> owned;
+  if (parent_ != nullptr) {
+    owned = parent_->detach(this);
+  }
+  if (owned == nullptr) {
+    owned.reset(this);  // was not in a block to begin with
+  }
+  block.insertBefore(std::move(owned), before);
+}
+
+void Instruction::removeIncoming(const BasicBlock* from) {
+  for (std::size_t i = 0; i < successors_.size();) {
+    if (successors_[i] != from) {
+      ++i;
+      continue;
+    }
+    if (operands_[i] != nullptr) {
+      operands_[i]->removeUser(this);
+    }
+    operands_.erase(operands_.begin() + static_cast<std::ptrdiff_t>(i));
+    successors_.erase(successors_.begin() + static_cast<std::ptrdiff_t>(i));
+  }
+}
+
 void Instruction::dropAllReferences() {
   for (Value*& operand : operands_) {
     if (operand != nullptr) {
@@ -238,6 +267,36 @@ Instruction* BasicBlock::insertAfterPhis(std::unique_ptr<Instruction> instructio
   }
   insts_.insert(insts_.begin() + static_cast<std::ptrdiff_t>(position),
                 std::move(instruction));
+  return raw;
+}
+
+std::unique_ptr<Instruction> BasicBlock::detach(Instruction* instruction) {
+  for (auto it = insts_.begin(); it != insts_.end(); ++it) {
+    if (it->get() == instruction) {
+      std::unique_ptr<Instruction> owned = std::move(*it);
+      insts_.erase(it);
+      owned->setParent(nullptr);
+      return owned;
+    }
+  }
+  return nullptr;
+}
+
+Instruction* BasicBlock::insertBefore(std::unique_ptr<Instruction> instruction,
+                                      Instruction* before) {
+  Instruction* raw = instruction.get();
+  raw->setParent(this);
+  if (before == nullptr) {
+    insts_.push_back(std::move(instruction));
+    return raw;
+  }
+  for (auto it = insts_.begin(); it != insts_.end(); ++it) {
+    if (it->get() == before) {
+      insts_.insert(it, std::move(instruction));
+      return raw;
+    }
+  }
+  insts_.push_back(std::move(instruction));
   return raw;
 }
 
@@ -389,6 +448,19 @@ Function* Module::createFunction(const std::string& name, const Type* returnType
 Function* Module::findFunction(const std::string& name) const {
   const auto it = functionsByName_.find(name);
   return it != functionsByName_.end() ? it->second : nullptr;
+}
+
+void Module::eraseFunction(Function* function) {
+  functionsByName_.erase(function->name());
+  // Drop operand references before the blocks are destroyed, exactly as
+  // ~Function does, so no surviving value keeps a dead instruction as a user.
+  function->dropAllReferences();
+  for (auto it = functions_.begin(); it != functions_.end(); ++it) {
+    if (it->get() == function) {
+      functions_.erase(it);
+      return;
+    }
+  }
 }
 
 ConstantInt* Module::getInt(std::int64_t value) {

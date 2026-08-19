@@ -56,6 +56,14 @@ public:
   /// so no value is left listing it as a user.
   void erase(Instruction* instruction);
 
+  /// Removes without destroying, handing ownership back. The instruction keeps
+  /// its operands and users, so it can be reinserted elsewhere.
+  std::unique_ptr<Instruction> detach(Instruction* instruction);
+
+  /// Inserts before `before`, or at the end when `before` is null.
+  Instruction* insertBefore(std::unique_ptr<Instruction> instruction,
+                            Instruction* before);
+
   /// Last instruction if it is a terminator, else null. A null result means the
   /// block is still open (during construction) or malformed (after).
   Instruction* terminator() const;

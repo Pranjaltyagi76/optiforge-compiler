@@ -102,6 +102,27 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       continue;
     }
 
+    if (arg == "--print-after-all") {
+      out.printAfterAll = true;
+      continue;
+    }
+
+    if (startsWith(arg, "--print-after=")) {
+      out.printAfter = std::string(arg.substr(std::string_view("--print-after=").size()));
+      continue;
+    }
+
+    if (arg == "--verify-each") {
+      out.verifyEach = true;
+      continue;
+    }
+
+    if (startsWith(arg, "--disable-pass=")) {
+      out.disabledPasses.emplace_back(
+          arg.substr(std::string_view("--disable-pass=").size()));
+      continue;
+    }
+
     if (arg == "--keep-temps") {
       out.keepTemps = true;
       continue;

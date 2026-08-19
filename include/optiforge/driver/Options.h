@@ -2,6 +2,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <vector>
 #include <string_view>
 
 namespace optiforge {
@@ -42,6 +43,10 @@ struct Options {
   bool warningsAsErrors = false;
   std::string runtimeDir;
   bool keepTemps = false;
+  bool printAfterAll = false;
+  bool verifyEach = false;
+  std::string printAfter;
+  std::vector<std::string> disabledPasses;
   bool showHelp = false;
   bool showVersion = false;
 };

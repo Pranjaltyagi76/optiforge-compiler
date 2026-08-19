@@ -41,6 +41,10 @@ public:
   ~Instruction() override;
 
   Opcode opcode() const { return opcode_; }
+  /// Rewrites the operation in place, keeping operands and users. Used by
+  /// strength reduction, which changes what an instruction computes with
+  /// without changing what it reads.
+  void setOpcode(Opcode opcode) { opcode_ = opcode; }
   bool isTerminator() const { return opcodeIsTerminator(opcode_); }
   bool hasResult() const { return opcodeHasResult(opcode_) && !type()->isVoid(); }
 
@@ -63,6 +67,11 @@ public:
   /// touch the instruction afterwards.
   void eraseFromParent();
 
+  /// Moves this instruction into `block`, immediately before `before`
+  /// (or to the end when `before` is null). Operands and users are untouched:
+  /// only its position changes. Used by LICM to hoist into a preheader.
+  void moveBefore(BasicBlock& block, Instruction* before);
+
   // --- Phi incoming edges ---
   //
   // A phi's operand i arrives from predecessor i. Stored in the same vector as
@@ -72,6 +81,11 @@ public:
   void addIncoming(Value* value, BasicBlock* from);
   BasicBlock* incomingBlock(std::size_t index) const { return successors_[index]; }
   std::size_t incomingCount() const { return successors_.size(); }
+
+  /// Drops the edge arriving from `from`, operand included. Called when a
+  /// predecessor stops reaching this block, since a phi's arity must keep
+  /// matching the predecessor list.
+  void removeIncoming(const BasicBlock* from);
 
   // --- Terminator successors ---
   const std::vector<BasicBlock*>& successors() const { return successors_; }

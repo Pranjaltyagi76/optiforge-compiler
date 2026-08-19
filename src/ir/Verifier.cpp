@@ -145,6 +145,8 @@ void Verifier::checkFunction(const Function& function) {
         case Opcode::Mul:
         case Opcode::SDiv:
         case Opcode::SRem:
+        case Opcode::Shl:
+        case Opcode::AShr:
           if (instruction->operandCount() == 2) {
             if (!instruction->operand(0)->type()->isI64() ||
                 !instruction->operand(1)->type()->isI64()) {

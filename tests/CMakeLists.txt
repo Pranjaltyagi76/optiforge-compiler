@@ -9,9 +9,10 @@ add_executable(of_unit_tests
   unit/test_irgen.cpp
   unit/test_codegen.cpp
   unit/test_analysis.cpp
-  unit/test_ssa.cpp)
+  unit/test_ssa.cpp
+  unit/test_passes.cpp)
 target_link_libraries(of_unit_tests PRIVATE
-  of_target_x86_64 of_backend of_transforms of_analysis of_irgen of_ir of_frontend of_support optiforge_options)
+  of_target_x86_64 of_backend of_transforms of_passes of_analysis of_irgen of_ir of_frontend of_support optiforge_options)
 target_include_directories(of_unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unit")
 
 add_test(NAME unit COMMAND of_unit_tests)

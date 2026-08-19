@@ -33,7 +33,6 @@ entry:
   br while.cond.1
 
 while.cond.1:                                   ; preds = entry, if.end.5
-  %t16 = phi i64 [ 0, entry ], [ %t15, if.end.5 ]
   %t14 = phi i64 [ 0, entry ], [ %t9, if.end.5 ]
   %t13 = phi i64 [ %n, entry ], [ %t11, if.end.5 ]
   %t1 = icmp gt i64 %t13, 0

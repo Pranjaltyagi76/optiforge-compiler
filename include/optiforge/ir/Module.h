@@ -29,6 +29,10 @@ public:
 
   Function* createFunction(const std::string& name, const Type* returnType);
   Function* findFunction(const std::string& name) const;
+
+  /// Removes a function and everything it owns. Callers must have established
+  /// that nothing still calls it.
+  void eraseFunction(Function* function);
   const std::vector<std::unique_ptr<Function>>& functions() const { return functions_; }
 
   // --- Interned constants ---

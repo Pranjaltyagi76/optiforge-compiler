@@ -63,6 +63,10 @@ bool operandIsByteSized(const char* mnemonic, std::size_t index) {
   if (std::strncmp(mnemonic, "movzb", 5) == 0) {
     return index == 0;
   }
+  // A variable shift names its count register as %cl, never %rcx.
+  if (std::strcmp(mnemonic, "shlq") == 0 || std::strcmp(mnemonic, "sarq") == 0) {
+    return index == 0;
+  }
   return false;
 }
 

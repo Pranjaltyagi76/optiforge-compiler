@@ -1,0 +1,42 @@
+=== exit ===
+0
+=== stdout ===
+module "tests/opt/pipeline.of" hash=0xb38b5c7bb0f775d8
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @work(i64 %n) -> i64 {
+entry:
+  br while.cond.1
+
+while.cond.1:                                   ; preds = entry, while.body.2
+  %t23 = phi i64 [ 0, entry ], [ %t10, while.body.2 ]
+  %t21 = phi i64 [ %n, entry ], [ %t17, while.body.2 ]
+  %t1 = icmp gt i64 %t21, 0
+  condbr %t1, while.body.2, while.end.3
+
+while.body.2:                                   ; preds = while.cond.1
+  %t6 = add i64 %t23, 80
+  %t9 = shl i64 %t21, 3
+  %t10 = add i64 %t6, %t9
+  %t17 = sub i64 %t21, 1
+  br while.cond.1
+
+while.end.3:                                    ; preds = while.cond.1
+  br if.end.5
+
+if.end.5:                                       ; preds = while.end.3
+  ret i64 %t23
+}
+
+fn @main() -> i64 {
+entry:
+  %t0 = call i64 @work(i64 3)
+  call void @print_int(i64 %t0)
+  ret i64 0
+}
+=== stderr ===

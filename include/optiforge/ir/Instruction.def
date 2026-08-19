@@ -20,6 +20,10 @@ OPCODE(SDiv,   "sdiv",   2, true,  false)
 OPCODE(SRem,   "srem",   2, true,  false)
 OPCODE(Neg,    "neg",    1, true,  false)
 
+// --- Shifts: produced by strength reduction ---
+OPCODE(Shl,    "shl",    2, true,  false)
+OPCODE(AShr,   "ashr",   2, true,  false)
+
 // --- Floating-point arithmetic ---
 OPCODE(FAdd,   "fadd",   2, true,  false)
 OPCODE(FSub,   "fsub",   2, true,  false)
