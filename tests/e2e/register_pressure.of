@@ -1,0 +1,54 @@
+// More simultaneously-live values than there are registers, so the allocator
+// has to spill and the spilled values still have to be right.
+//
+// Twenty locals are live across a loop that reads all of them, against a pool of
+// eight allocatable integer registers. Whatever the allocator keeps and whatever
+// it spills, the arithmetic is fixed, which is the point: the answer does not
+// depend on the allocation and so tests it.
+//
+// EXPECT-OUTPUT: 630
+// EXPECT-OUTPUT: 930
+// EXPECT-OUTPUT: 1230
+// EXPECT-OUTPUT: -594
+// EXPECT-OUTPUT: 123456
+fn pressure(int n) -> int {
+    int a = n + 1;  int b = n + 2;  int c = n + 3;  int d = n + 4;
+    int e = n + 5;  int f = n + 6;  int g = n + 7;  int h = n + 8;
+    int i = n + 9;  int j = n + 10; int k = n + 11; int l = n + 12;
+    int m = n + 13; int o = n + 14; int p = n + 15; int q = n + 16;
+    int r = n + 17; int s = n + 18; int t = n + 19; int u = n + 20;
+    int acc = 0;
+    int z = 0;
+    while (z < 3) {
+        acc = acc + a + b + c + d + e + f + g + h + i + j;
+        acc = acc + k + l + m + o + p + q + r + s + t + u;
+        z = z + 1;
+    }
+    return acc;
+}
+
+// Pressure across a call: everything live here has to survive a callee that is
+// entitled to destroy every caller-saved register.
+fn across_call(int n) -> int {
+    int a = n + 1; int b = n + 2; int c = n + 3; int d = n + 4;
+    int e = n + 5; int f = n + 6; int g = n + 7; int h = n + 8;
+    int mid = pressure(0);
+    if (mid > 0) {
+        return a + b + c + d + e + f + g + h - mid;
+    }
+    return 0;
+}
+
+// More arguments than fit in registers, so some arrive on the stack.
+fn many(int a, int b, int c, int d, int e, int f) -> int {
+    return a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f;
+}
+
+fn main() -> int {
+    print_int(pressure(0));
+    print_int(pressure(5));
+    print_int(pressure(10));
+    print_int(across_call(0));
+    print_int(many(1, 2, 3, 4, 5, 6));
+    return 0;
+}

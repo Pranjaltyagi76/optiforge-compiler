@@ -507,7 +507,7 @@ Every one has a working default. None is required for normal use.
 | 0 | CMake skeleton, presets, CI pipeline, `.gitignore`, `git init` |
 | **Pre-4** | **⚠ Resolve the target-platform decision (§2) and update ADR-10** |
 | 4 | `libofrt` builds and links; assembler/linker invocation works; install layout established |
-| 8 | `--regalloc` selection wired through the driver |
+| 8 | ✅ `--regalloc=naive\|graph` wired through the driver, defaulting to graph; `--print-regalloc` reports what the allocator did |
 | 9 | `libofprof` builds and links; `.prof` written to a configurable path |
 | 10 | `--profile-report` available as a standalone mode |
 | 11 | Driver enforces matching `-O` levels between instrumented and PGO builds |

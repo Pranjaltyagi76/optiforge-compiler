@@ -188,11 +188,23 @@ def make_program(seed):
         prints.append(f"    print_float({v});")
     return "fn main() -> int {\n" + body + "\n" + "\n".join(prints) + "\n    return 0;\n}\n"
 
-def run(src, workdir, level, idx):
+# Every configuration must agree with -O0. The naive allocator is in the list
+# on purpose: when a configuration diverges, the pair that differs says whether
+# the allocator or an optimization is to blame (ADR-08).
+CONFIGS = [
+    ("-O1", []),
+    ("-O2", []),
+    ("-O0", ["--regalloc=naive"]),
+    ("-O2", ["--regalloc=naive"]),
+]
+
+
+def run(src, workdir, level, idx, extra=()):
     f = workdir / f"p{idx}.of"
     f.write_text(src)
-    exe = workdir / f"p{idx}_{level[1:]}.exe"
-    c = subprocess.run([OPT, str(f), level, "-o", str(exe)],
+    tag = "".join(ch for ch in level + "".join(extra) if ch.isalnum())
+    exe = workdir / f"p{idx}_{tag}.exe"
+    c = subprocess.run([OPT, str(f), level, *extra, "-o", str(exe)],
                        capture_output=True, text=True, timeout=120)
     if c.returncode != 0:
         return ("COMPILE_FAIL", c.returncode, (c.stdout + c.stderr)[:800])
@@ -208,17 +220,16 @@ def main():
     try:
         for i in range(SEED0, SEED0 + N):
             src = make_program(i)
-            res = {}
-            for lvl in ("-O0", "-O1", "-O2"):
-                res[lvl] = run(src, tmp, lvl, i)
-            base = res["-O0"]
-            for lvl in ("-O1", "-O2"):
-                if res[lvl] != base:
+            base = run(src, tmp, "-O0", i)
+            for level, extra in CONFIGS:
+                label = level + "".join(" " + a for a in extra)
+                result = run(src, tmp, level, i, extra)
+                if result != base:
                     bad += 1
                     print("=" * 70)
-                    print(f"MISMATCH seed={i} at {lvl}")
+                    print(f"MISMATCH seed={i} at {label}")
                     print(f"  -O0: {base}")
-                    print(f"  {lvl}: {res[lvl]}")
+                    print(f"  {label}: {result}")
                     print(src)
                     break
             if bad >= 6:

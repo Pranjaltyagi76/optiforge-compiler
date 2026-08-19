@@ -1,0 +1,46 @@
+// Instructions that demand specific registers, with allocated values around them.
+//
+// `idiv` is fixed to rdx:rax, a variable shift takes its count only in cl, and
+// a call writes rcx/rdx/r8/r9 in turn. Phase 8 handles all of that by keeping
+// those registers out of the allocatable pool rather than modelling them as
+// pre-coloured nodes — so the thing to test is that a value living in an
+// allocated register survives every one of those sequences.
+//
+// Everything below is computed inside a loop, so the accumulator and the
+// counter are exactly the values the allocator most wants to keep in registers,
+// and they straddle each fixed-register instruction.
+//
+// EXPECT-OUTPUT: 3
+// EXPECT-OUTPUT: 2517
+// EXPECT-OUTPUT: 10
+// EXPECT-OUTPUT: -5
+fn mixed(int a, int b, int n) -> int {
+    int t = 0;
+    int i = 0;
+    while (i < n) {
+        t = t + (a * 8) + (a / (b + 1)) + (b % (a + 1));
+        i = i + 1;
+    }
+    print_int(i);
+    return t;
+}
+
+fn shifted(int x, int n) -> int {
+    int t = 0;
+    int i = 0;
+    while (i < n) { t = t + x * 2 + x * 4 + x * 16; i = i + 1; }
+    return t;
+}
+
+// Signed division and remainder round toward zero; negative operands are where
+// a shift-based "optimization" would silently disagree.
+fn signs(int a, int b) -> int {
+    return (a / b) + (a % b);
+}
+
+fn main() -> int {
+    print_int(mixed(100, 37, 3));
+    print_int(shifted(10, 5) - 1090);
+    print_int(signs(-17, 5));
+    return 0;
+}

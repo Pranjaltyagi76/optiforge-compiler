@@ -31,6 +31,14 @@ std::string_view regName(MReg reg) {
     case MReg::XMM5: return "%xmm5";
     case MReg::XMM6: return "%xmm6";
     case MReg::XMM7: return "%xmm7";
+    case MReg::XMM8: return "%xmm8";
+    case MReg::XMM9: return "%xmm9";
+    case MReg::XMM10: return "%xmm10";
+    case MReg::XMM11: return "%xmm11";
+    case MReg::XMM12: return "%xmm12";
+    case MReg::XMM13: return "%xmm13";
+    case MReg::XMM14: return "%xmm14";
+    case MReg::XMM15: return "%xmm15";
   }
   return "%<?>";
 }
@@ -56,7 +64,7 @@ std::string_view regName8(MReg reg) {
 }
 
 bool isFloatReg(MReg reg) {
-  return reg >= MReg::XMM0 && reg <= MReg::XMM7;
+  return reg >= MReg::XMM0 && reg <= MReg::XMM15;
 }
 
 MOperand MOperand::makeReg(MReg reg, bool isDef) {

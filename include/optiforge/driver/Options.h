@@ -32,6 +32,21 @@ enum class EmitStage {
 
 std::string_view toString(EmitStage stage);
 
+/// Which register allocator the backend should use (ADR-08).
+///
+/// Named here rather than taken from the backend so the option surface does not
+/// drag a backend header into the driver's interface. The driver maps it to
+/// `backend::RegAllocKind` at the one place it constructs the code generator.
+enum class RegAllocChoice {
+  Naive,  ///< Phase 4: every value in a frame slot. The bisection tool.
+  Graph,  ///< Phase 8: Chaitin-Briggs graph colouring. The default.
+};
+
+std::string_view toString(RegAllocChoice choice);
+
+/// Parses the argument of --regalloc=. Returns false if the name is unknown.
+bool parseRegAllocChoice(std::string_view name, RegAllocChoice& out);
+
 /// Parses the argument of --emit=. Returns false if the name is unknown.
 bool parseEmitStage(std::string_view name, EmitStage& out);
 
@@ -40,11 +55,13 @@ struct Options {
   std::string outputPath;
   int optLevel = 0;
   EmitStage emit = EmitStage::Executable;
+  RegAllocChoice regalloc = RegAllocChoice::Graph;
   bool warningsAsErrors = false;
   std::string runtimeDir;
   bool keepTemps = false;
   bool printAfterAll = false;
   bool verifyEach = false;
+  bool printRegAlloc = false;
   std::string printAfter;
   std::vector<std::string> disabledPasses;
   bool showHelp = false;

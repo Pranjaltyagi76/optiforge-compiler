@@ -12,6 +12,10 @@ enum class MReg : std::uint8_t {
   RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
   R8, R9, R10, R11, R12, R13, R14, R15,
   XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7,
+  // xmm8-xmm15 exist so the allocator has something to allocate: on this ABI
+  // xmm0-xmm3 carry arguments and xmm4-xmm5 are the code generator's scratch,
+  // which leaves xmm6-xmm15 -- all callee-saved -- as the float pool.
+  XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15,
 };
 
 /// AT&T spelling, including the `%` sigil.

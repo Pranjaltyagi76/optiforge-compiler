@@ -252,14 +252,57 @@ rose from 46.0% to 47.7%.)
 ### Phase 8 — Real Register Allocation
 **Goal:** Replace the Phase-4 stack allocator with graph coloring.
 
-- [ ] Live-range construction from liveness. `Liveness` is edge-accurate as of
-      Phase 7.5: a phi operand is live out of the predecessor it arrives from and
-      nowhere else, which is the property live ranges have to be built on.
-- [ ] Interference graph construction.
-- [ ] Chaitin–Briggs coloring: simplify / coalesce / freeze / spill / select.
-- [ ] Spill code insertion with reload minimization; spill-cost heuristic using loop depth (and later, profile weight).
-- [ ] Callee-saved and caller-saved register discipline; ABI-correct clobber handling around calls.
-- [ ] Register-pressure-aware verification.
+- [x] Live-range construction. **Over allocation units, not values** — the two
+      answer different questions. SSA destruction leaves several values sharing
+      one location, and no single value's range describes that; taking the union
+      over-approximates so badly that two locations in unrelated loops appear
+      live everywhere. Same dataflow driver (AN-11), different domain.
+- [x] Interference graph construction, from the def-point rule: two units
+      interfere when one is live where the other is defined. Arguments are
+      defined by the calling convention at the function entry, which is a
+      definition point no walk over instructions ever reaches, so it is added
+      explicitly.
+- [x] Chaitin–Briggs coloring: simplify / coalesce / freeze / spill / select, as
+      one interleaved loop rather than separate phases. Simplify skips
+      move-related nodes so a copy keeps its chance to be coalesced; freeze is
+      what breaks the deadlock when nothing simplifies and nothing coalesces,
+      giving up a copy rather than spilling the node holding it. Degrees are
+      recomputed rather than maintained incrementally — O(n²) against the
+      textbook's O(n), immeasurable at tens of units per function, and it is
+      where this algorithm is usually got wrong.
+- [x] Spilling, with a cost heuristic of Σ 10^loopDepth over uses and defs,
+      divided by degree. **No spill-code insertion pass, deliberately:** the code
+      generator already computes with values that live in memory — that is all
+      the naive allocator ever did — so "spill" here means only "assign no
+      register". The reloads use the reserved scratch registers, which are not
+      allocatable and so add no live range the graph would need to know about,
+      which is what makes the usual build/spill/rebuild loop unnecessary.
+- [x] Callee-saved and caller-saved discipline: a value live across a call is
+      refused every caller-saved register, and the prologue saves exactly the
+      callee-saved registers the assignment used — `push`/`pop` for the
+      general-purpose ones, `movups` to a frame slot for the SSE ones, which
+      have no push.
+- [x] Register-pressure verification, run on **every** compilation rather than
+      behind a flag. It recomputes live ranges independently and checks every
+      pair live at every point, where the allocator only adds edges at
+      definition points; the two are equivalent when the ranges are exact and
+      diverge exactly where they are not. It found the missing argument edges,
+      and it refuses to emit an assignment it cannot vouch for.
+- [x] `--regalloc=naive|graph` (ADR-08), and the whole end-to-end suite runs
+      through both.
+
+**No pre-colouring.** `idiv` wants `rax`/`rdx`, a variable shift wants `cl`, a
+call writes every argument register in turn. Rather than model those as
+pre-coloured nodes, the target keeps them out of the allocatable pool: eight
+integer registers instead of fourteen, and an allocator whose correctness
+argument fits on a page. Recorded as a deliberate trade, not an oversight.
+
+**Status: COMPLETE** (verified: 356 unit assertions, 36 golden cases, 48
+end-to-end runs at three optimization levels plus 32 more through
+`--regalloc=naive`, clean -Werror build in Debug and Release, and fuzzer
+programs comparing four configurations -- `-O1`, `-O2`, and both allocators --
+against `-O0`. Metric BE-04 = 61.0% fewer frame accesses at `-O2`, recorded in
+metrics/results/2026-08-19-phase8-register-allocation.md.)
 
 **Exit criteria:** All tests still pass; measurable reduction in memory traffic versus Phase 4; register-pressure stress tests do not miscompile.
 
@@ -355,7 +398,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | M2 | "It has an IR" | P3 | `--emit=ir` and `--emit=cfg` render a loop's CFG |
 | M3 | ⭐ **"It runs"** | P4 | ✅ **REACHED** — `./fib.exe` prints 832040 |
 | M4 | "It optimizes" | P7 | Same output, roughly 30–50% fewer IR instructions at `-O2` |
-| M5 | "It allocates registers" | P8 | Generated assembly keeps values in registers across a loop |
+| M5 | **"It allocates registers"** | P8 | ✅ **REACHED** — `sum.of`'s loop body is three instructions and no memory access, down from twelve and eight |
 | M6 | "It profiles" | P9–P10 | A `.prof` file plus a hot-path report identifying the real hot loop |
 | M7 | ⭐ **"PGO beats -O2"** | P11–P12 | Benchmark table with measured speedup |
 
@@ -371,7 +414,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | An optimization miscompiles a shape nobody wrote a test for | High | **Realized in Phase 7.5** | Hand-written tests found none of the two miscompiles the differential fuzzer found in minutes. Fuzz before declaring a phase complete, not after. |
 | An optimistic analysis treats "not yet known" as "cannot happen" | High | **Realized in Phase 7.5** | Both SCCP miscompiles were this. Any lattice-based pass must guarantee every value leaves the bottom element, and every edge that can fire is eventually marked. |
 | No sanitizers on MinGW, so QA-07 cannot be met | Medium | Certain | Consequence of ADR-10. Memory bugs must be caught by design and review; Phase 3 found a teardown use-after-free by inspection, which is the standard this now requires. |
-| Register allocator miscompiles under pressure | High | Medium | Keep the Phase-4 stack allocator as a permanent fallback (`--regalloc=naive`); stress tests with more than 16 simultaneously live values |
+| ~~Register allocator miscompiles under pressure~~ **RETIRED 2026-08-19** | — | — | Mitigated as planned: `--regalloc=naive` is kept and the whole end-to-end suite runs through it, `tests/e2e/register_pressure.of` holds 22 values live against 8 registers, and every compilation verifies the assignment against independently recomputed live ranges rather than trusting it. |
 | Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme, source hash in the header, and a loud warning on mismatch (Phases 9–10) |
 | Instrumentation perturbs the behaviour it measures | Medium | Medium | Instrument late in the pipeline; measure and document overhead; prefer edge counters over block counters where equivalent |
 | PGO shows no measurable win | Medium | Medium | Design benchmarks with genuinely biased branches and hot loops; if a pass shows no win, report that honestly — a negative result with analysis is still a result |

@@ -8,6 +8,7 @@ add_executable(of_unit_tests
   unit/test_ir.cpp
   unit/test_irgen.cpp
   unit/test_codegen.cpp
+  unit/test_regalloc.cpp
   unit/test_analysis.cpp
   unit/test_ssa.cpp
   unit/test_passes.cpp)
@@ -42,6 +43,18 @@ if(Python3_Interpreter_FOUND)
             --dir "${CMAKE_CURRENT_SOURCE_DIR}/e2e"
             "--levels=-O0,-O1,-O2")
   set_tests_properties(e2e PROPERTIES TIMEOUT 300)
+
+  # The same programs through the Phase-4 allocator. ADR-08 keeps it supported
+  # forever precisely so a miscompile can be bisected to the graph allocator in
+  # one flag -- which is only true if it is still known to work.
+  add_test(NAME e2e-naive
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/run_e2e.py"
+            --optiforge "$<TARGET_FILE:optiforge>"
+            --dir "${CMAKE_CURRENT_SOURCE_DIR}/e2e"
+            "--levels=-O0,-O2"
+            "--extra-arg=--regalloc=naive")
+  set_tests_properties(e2e-naive PROPERTIES TIMEOUT 300)
 else()
   message(WARNING
     "Python 3 not found; golden-file and end-to-end tests will be skipped. "

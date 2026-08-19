@@ -14,6 +14,7 @@ Optimization:
   -O0                  No optimization (default)
   -O1                  Basic optimization
   -O2                  Full optimization
+  --regalloc=<kind>    Register allocator: naive or graph (default: graph)
 
 Diagnostics:
   -Werror              Treat warnings as errors

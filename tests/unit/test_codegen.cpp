@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "TestHarness.h"
+#include "optiforge/analysis/AnalysisManager.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/TargetInfo.h"
 #include "optiforge/frontend/Lexer.h"
@@ -21,7 +22,13 @@ using namespace optiforge::backend;
 namespace {
 
 /// Compiles a source fragment all the way to assembly text.
-std::string assemblyFor(std::string source) {
+///
+/// Defaults to the naive allocator, because that is what the assertions in this
+/// file are about: the instruction selector and the ABI, both of which are
+/// easiest to read when every value is in a known frame slot. The graph
+/// allocator has its own file.
+std::string assemblyFor(std::string source,
+                        RegAllocKind allocator = RegAllocKind::Naive) {
   SourceManager sm;
   std::ostringstream diagOut;
   const FileID file = sm.addBuffer("t.of", std::move(source));
@@ -45,8 +52,9 @@ std::string assemblyFor(std::string source) {
   IRGen irgen(diags, "t.of", sm.contentHash(file));
   const std::unique_ptr<ir::Module> module = irgen.run(*ast);
 
-  CodeGen codegen(x86_64WindowsTarget());
-  const MModule machine = codegen.run(*module);
+  analysis::AnalysisManager analyses;
+  CodeGen codegen(x86_64WindowsTarget(), allocator);
+  const MModule machine = codegen.run(*module, analyses);
 
   std::ostringstream out;
   printAssembly(machine, out);

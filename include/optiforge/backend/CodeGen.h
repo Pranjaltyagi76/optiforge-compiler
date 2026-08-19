@@ -7,7 +7,12 @@
 #include <vector>
 
 #include "optiforge/backend/MachineIR.h"
+#include "optiforge/backend/RegAlloc.h"
 #include "optiforge/backend/TargetInfo.h"
+
+namespace optiforge::analysis {
+class AnalysisManager;
+}
 
 namespace optiforge::ir {
 class Module;
@@ -19,21 +24,40 @@ class Value;
 
 namespace optiforge::backend {
 
-/// Naive code generator: correct, and deliberately not fast.
+/// Turns IR into machine instructions.
 ///
-/// Every value lives in its own stack slot. Operands are loaded into scratch
-/// registers, the operation is performed, and the result is stored straight
-/// back to memory. Nothing is kept in a register across instructions.
+/// One code generator, two allocation strategies (ADR-08):
 ///
-/// That is the whole point of Phase 4 (ADR-08): it establishes a working
-/// executable that the graph-colouring allocator in Phase 8 can be measured
-/// against, and it stays in the tree afterwards as `--regalloc=naive` so a
-/// miscompile can be bisected to the allocator in one flag.
+///   - `RegAllocKind::Naive` is Phase 4. Every value lives in its own frame
+///     slot; operands are loaded into scratch registers, the operation runs,
+///     the result goes straight back to memory. Correct, slow, and completely
+///     predictable -- which is exactly what is wanted when the bug is somewhere
+///     else.
+///   - `RegAllocKind::Graph` is Phase 8. A value that the allocator coloured
+///     lives in its register for its whole live range and is never written to
+///     memory at all; a value it spilled behaves exactly as it did in Phase 4.
+///
+/// The two share every lowering rule. `loadInt`, `loadFloat` and `storeResult`
+/// are the only places that know where a value lives, so adding the allocator
+/// did not fork the instruction selector.
 class CodeGen {
 public:
-  explicit CodeGen(const TargetInfo& target) : target_(target) {}
+  explicit CodeGen(const TargetInfo& target, RegAllocKind allocator = RegAllocKind::Graph)
+      : target_(target), allocator_(allocator) {}
 
-  MModule run(const ir::Module& module);
+  /// `analyses` supplies the liveness and loop information the graph allocator
+  /// runs on. It is passed even for the naive allocator so the caller does not
+  /// have to know which one is in use; nothing is computed if it is not needed.
+  MModule run(const ir::Module& module, analysis::AnalysisManager& analyses);
+
+  /// Allocation errors found by `verifyAssignment`, accumulated across the
+  /// module. Non-empty means the compiler produced code it cannot vouch for,
+  /// which the driver reports as an internal error rather than shipping.
+  const std::vector<std::string>& allocationErrors() const { return allocationErrors_; }
+
+  /// Per-function allocation statistics, in module order. Feeds the metrics
+  /// table and the tests that would otherwise have to grep assembly.
+  const std::vector<RegisterAssignment>& allocations() const { return allocations_; }
 
 private:
   void lowerFunction(const ir::Function& function, MFunction& out);
@@ -63,6 +87,12 @@ private:
 
   /// Frame offset of the slot `value` occupies, if it has one.
   bool slotOf(const ir::Value* value, std::int32_t& offset) const;
+  /// Register `value` was allocated, if it has one. A value has either a
+  /// register or a slot, never both.
+  bool regOf(const ir::Value* value, MReg& reg) const;
+  /// The register an instruction's result should be computed into, or `fallback`
+  /// when it was spilled.
+  MReg destinationFor(const ir::Instruction& instruction, MReg fallback) const;
   /// Frame offset an alloca's storage occupies, when `value` is that alloca.
   /// Lets `load`/`store` address the slot directly instead of computing its
   /// address into a register first.
@@ -76,6 +106,7 @@ private:
   void emitLabel(std::string label);
 
   const TargetInfo& target_;
+  RegAllocKind allocator_ = RegAllocKind::Graph;
   MModule* module_ = nullptr;
   MFunction* function_ = nullptr;
   MBasicBlock* block_ = nullptr;
@@ -85,6 +116,19 @@ private:
   std::unordered_map<std::uint64_t, std::string> floatLabels_;
   std::int32_t localBytes_ = 0;
   std::int32_t outgoingBytes_ = 0;
+
+  // --- Register allocation, per function ---
+  RegisterAssignment assignment_;
+  /// Callee-saved GPRs pushed by the prologue, in push order. Their slots sit
+  /// immediately below rbp, so every local offset starts past them.
+  std::vector<MReg> savedGprs_;
+  /// Callee-saved SSE registers, which have no push instruction and so live in
+  /// frame slots of their own.
+  std::vector<std::pair<MReg, std::int32_t>> savedXmms_;
+  std::int32_t savedGprBytes_ = 0;
+
+  std::vector<std::string> allocationErrors_;
+  std::vector<RegisterAssignment> allocations_;
 };
 
 /// Renders a machine module as GNU assembler input (AT&T syntax).

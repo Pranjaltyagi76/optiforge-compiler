@@ -1,8 +1,10 @@
 #include "optiforge/backend/CodeGen.h"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
 
+#include "optiforge/analysis/AnalysisManager.h"
 #include "optiforge/ir/BasicBlock.h"
 #include "optiforge/ir/Function.h"
 #include "optiforge/ir/Instruction.h"
@@ -126,6 +128,21 @@ bool CodeGen::slotOf(const ir::Value* value, std::int32_t& offset) const {
   return true;
 }
 
+bool CodeGen::regOf(const ir::Value* value, MReg& reg) const {
+  return value != nullptr && assignment_.registerFor(value, reg);
+}
+
+MReg CodeGen::destinationFor(const ir::Instruction& instruction, MReg fallback) const {
+  MReg reg = MReg::None;
+  // The class has to match: a float result computed into an integer register
+  // would be nonsense. The allocator never produces that, but the check costs
+  // nothing and keeps the invariant local to the place that relies on it.
+  if (regOf(&instruction, reg) && isFloatReg(reg) == isFloatReg(fallback)) {
+    return reg;
+  }
+  return fallback;
+}
+
 bool CodeGen::directSlot(const ir::Value* value, std::int32_t& offset) const {
   if (value == nullptr || value->valueKind() != ir::Value::Kind::Instruction) {
     return false;
@@ -139,11 +156,38 @@ bool CodeGen::directSlot(const ir::Value* value, std::int32_t& offset) const {
 
 void CodeGen::assignSlots(const ir::Function& function) {
   slots_.clear();
-  std::int32_t offset = 0;
+  savedGprs_.clear();
+  savedXmms_.clear();
 
-  // Incoming arguments are copied into slots by the prologue, so the rest of
-  // the generator can treat them exactly like any other value.
+  // Callee-saved registers first. The general-purpose ones are pushed as soon
+  // as rbp is established, so they occupy the bytes immediately below it and
+  // every local has to start past them.
+  for (MReg reg : assignment_.usedCalleeSaved) {
+    if (!isFloatReg(reg)) {
+      savedGprs_.push_back(reg);
+    }
+  }
+  savedGprBytes_ = static_cast<std::int32_t>(savedGprs_.size()) * 8;
+
+  std::int32_t offset = savedGprBytes_;
+
+  // SSE registers have no push instruction, so the callee-saved ones get frame
+  // slots of their own. Sixteen bytes each: the ABI wants the whole register
+  // back, not just the double we kept in it.
+  for (MReg reg : assignment_.usedCalleeSaved) {
+    if (isFloatReg(reg)) {
+      offset += 16;
+      savedXmms_.push_back({reg, -offset});
+    }
+  }
+
+  // Incoming arguments are copied into their home -- a register when the
+  // allocator gave them one, a slot otherwise -- by the prologue, so the rest
+  // of the generator treats them exactly like any other value.
   for (const auto& argument : function.arguments()) {
+    if (assignment_.assigned.count(argument.get()) != 0) {
+      continue;
+    }
     offset += 8;
     slots_[argument.get()] = -offset;
   }
@@ -163,6 +207,12 @@ void CodeGen::assignSlots(const ir::Function& function) {
           instruction->slotAlias() != instruction.get()) {
         continue;
       }
+      // A value the allocator coloured needs no slot at all. That, and nothing
+      // else, is what makes a spill here free of any rewrite: a spilled value
+      // simply keeps the slot it would have had anyway.
+      if (assignment_.assigned.count(instruction.get()) != 0) {
+        continue;
+      }
       if (instruction->opcode() == Opcode::Alloca || instruction->hasResult()) {
         offset += 8;
         slots_[instruction.get()] = -offset;
@@ -176,7 +226,8 @@ void CodeGen::assignSlots(const ir::Function& function) {
   for (const auto& block : function.blocks()) {
     for (const auto& instruction : block->instructions()) {
       const ir::Instruction* root = instruction->slotAlias();
-      if (root == nullptr || root == instruction.get()) {
+      if (root == nullptr || root == instruction.get() ||
+          assignment_.assigned.count(instruction.get()) != 0) {
         continue;
       }
       const auto it = slots_.find(root);
@@ -186,7 +237,7 @@ void CodeGen::assignSlots(const ir::Function& function) {
     }
   }
 
-  localBytes_ = offset;
+  localBytes_ = offset - savedGprBytes_;
 
   // Space for outgoing arguments: shadow space always, plus one slot for each
   // argument past the fourth.
@@ -198,11 +249,24 @@ void CodeGen::assignSlots(const ir::Function& function) {
 
   function_->frameSize =
       alignUp(localBytes_ + outgoingBytes_, target_.stackAlignment());
+
+  // Alignment, restated because the callee-saved pushes moved it. rsp has to be
+  // 16-byte aligned at every call, and what gets it there is `push rbp` plus
+  // those pushes plus the frame. An odd number of pushes leaves it eight bytes
+  // out, and the frame is the only part still free to correct it.
+  if (savedGprs_.size() % 2 == 1) {
+    function_->frameSize += 8;
+  }
 }
 
 void CodeGen::emitPrologue(const ir::Function& function) {
   emit("pushq", {MOperand::makeReg(MReg::RBP)});
   emit("movq", {MOperand::makeReg(MReg::RSP), MOperand::makeReg(MReg::RBP, true)});
+
+  for (MReg reg : savedGprs_) {
+    emit("pushq", {MOperand::makeReg(reg)}, "callee-saved");
+  }
+
   if (function_->frameSize > 0) {
     emit("subq",
          {MOperand::makeImm(function_->frameSize), MOperand::makeReg(MReg::RSP, true)},
@@ -210,40 +274,79 @@ void CodeGen::emitPrologue(const ir::Function& function) {
              std::to_string(outgoingBytes_) + " outgoing");
   }
 
-  // Copy incoming arguments into their slots.
+  // After the frame is reserved, never before: Windows x64 has no red zone, so
+  // anything written below rsp can be overwritten before it is read back.
+  for (const auto& saved : savedXmms_) {
+    emit("movups",
+         {MOperand::makeReg(saved.first), MOperand::makeMem(MReg::RBP, saved.second)},
+         "callee-saved");
+  }
+
+  // Copy incoming arguments into their home.
   for (std::size_t i = 0; i < function.arguments().size(); ++i) {
     const ir::Argument& argument = *function.arguments()[i];
-    std::int32_t slot = 0;
-    if (!slotOf(&argument, slot)) {
-      continue;
-    }
     const bool isFloat = argument.type()->isF64();
+    const char* move = isFloat ? "movsd" : "movq";
+
+    MReg home = MReg::None;
+    const bool inRegister = regOf(&argument, home);
+    std::int32_t slot = 0;
+    if (!inRegister && !slotOf(&argument, slot)) {
+      continue;  // an argument nothing reads
+    }
 
     if (i < target_.maxRegisterArgs()) {
       const MReg source =
           isFloat ? target_.floatArgRegister(static_cast<unsigned>(i))
                   : target_.integerArgRegister(static_cast<unsigned>(i));
-      emit(isFloat ? "movsd" : "movq",
-           {MOperand::makeReg(source), MOperand::makeMem(MReg::RBP, slot)},
+      if (!inRegister) {
+        emit(move, {MOperand::makeReg(source), MOperand::makeMem(MReg::RBP, slot)},
+             "arg " + argument.name());
+      } else if (home != source) {
+        // Argument registers are never allocatable, so moving one into an
+        // allocated register cannot clobber an argument not yet copied.
+        emit(move, {MOperand::makeReg(source), MOperand::makeReg(home, true)},
+             "arg " + argument.name());
+      }
+      continue;
+    }
+
+    // Stack arguments sit above the return address and saved rbp, past the
+    // caller's 32-byte shadow space: rbp + 16 + 32 + 8*(i-4).
+    const std::int32_t incoming =
+        16 + target_.shadowSpaceBytes() +
+        static_cast<std::int32_t>(i - target_.maxRegisterArgs()) * 8;
+    if (inRegister) {
+      emit(move, {MOperand::makeMem(MReg::RBP, incoming), MOperand::makeReg(home, true)},
            "arg " + argument.name());
     } else {
-      // Stack arguments sit above the return address and saved rbp, past the
-      // caller's 32-byte shadow space: rbp + 16 + 32 + 8*(i-4).
-      const std::int32_t incoming =
-          16 + target_.shadowSpaceBytes() +
-          static_cast<std::int32_t>(i - target_.maxRegisterArgs()) * 8;
       const MReg scratch = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
-      emit(isFloat ? "movsd" : "movq",
+      emit(move,
            {MOperand::makeMem(MReg::RBP, incoming), MOperand::makeReg(scratch, true)});
-      emit(isFloat ? "movsd" : "movq",
-           {MOperand::makeReg(scratch), MOperand::makeMem(MReg::RBP, slot)},
+      emit(move, {MOperand::makeReg(scratch), MOperand::makeMem(MReg::RBP, slot)},
            "arg " + argument.name());
     }
   }
 }
 
 void CodeGen::emitEpilogue() {
-  emit("movq", {MOperand::makeReg(MReg::RBP), MOperand::makeReg(MReg::RSP, true)});
+  for (const auto& saved : savedXmms_) {
+    emit("movups",
+         {MOperand::makeMem(MReg::RBP, saved.second), MOperand::makeReg(saved.first, true)},
+         "restore callee-saved");
+  }
+
+  if (savedGprs_.empty()) {
+    emit("movq", {MOperand::makeReg(MReg::RBP), MOperand::makeReg(MReg::RSP, true)});
+  } else {
+    // Point rsp at the last register pushed rather than trusting it to still be
+    // where the prologue left it, then unwind in reverse.
+    emit("leaq", {MOperand::makeMem(MReg::RBP, -savedGprBytes_),
+                  MOperand::makeReg(MReg::RSP, true)});
+    for (auto it = savedGprs_.rbegin(); it != savedGprs_.rend(); ++it) {
+      emit("popq", {MOperand::makeReg(*it, true)}, "restore callee-saved");
+    }
+  }
   emit("popq", {MOperand::makeReg(MReg::RBP, true)});
   emit("ret", {});
 }
@@ -268,6 +371,14 @@ void CodeGen::loadInt(const ir::Value* value, MReg destination) {
 
     default:
       break;
+  }
+
+  MReg home = MReg::None;
+  if (regOf(value, home)) {
+    if (home != destination) {
+      emit("movq", {MOperand::makeReg(home), MOperand::makeReg(destination, true)});
+    }
+    return;
   }
 
   std::int32_t offset = 0;
@@ -295,6 +406,14 @@ void CodeGen::loadFloat(const ir::Value* value, MReg destination) {
     return;
   }
 
+  MReg home = MReg::None;
+  if (regOf(value, home)) {
+    if (home != destination) {
+      emit("movsd", {MOperand::makeReg(home), MOperand::makeReg(destination, true)});
+    }
+    return;
+  }
+
   std::int32_t offset = 0;
   if (slotOf(value, offset)) {
     emit("movsd", {MOperand::makeMem(MReg::RBP, offset),
@@ -306,6 +425,17 @@ void CodeGen::loadFloat(const ir::Value* value, MReg destination) {
 }
 
 void CodeGen::storeResult(const ir::Instruction& instruction, MReg source) {
+  MReg home = MReg::None;
+  if (regOf(&instruction, home)) {
+    // Usually a no-op: the lowering asked for the result to be computed in the
+    // register it lives in, which is the entire point of allocating one.
+    if (home != source) {
+      emit(isFloatReg(source) ? "movsd" : "movq",
+           {MOperand::makeReg(source), MOperand::makeReg(home, true)});
+    }
+    return;
+  }
+
   std::int32_t offset = 0;
   if (!slotOf(&instruction, offset)) {
     return;
@@ -319,19 +449,30 @@ void CodeGen::storeResult(const ir::Instruction& instruction, MReg source) {
 // ---------------------------------------------------------------------------
 
 void CodeGen::lowerBinaryInt(const ir::Instruction& instruction, const char* mnemonic) {
-  const MReg lhs = target_.scratchInt0();
-  const MReg rhs = target_.scratchInt1();
+  // Compute straight into the result's own register when it has one, which
+  // turns the store that followed in Phase 4 into nothing at all.
+  const MReg lhs = destinationFor(instruction, target_.scratchInt0());
+  // Read the right operand where it already lives, unless that is the register
+  // the result is being computed in -- loading the left operand there would
+  // destroy it.
+  MReg rhs = MReg::None;
+  if (!regOf(instruction.operand(1), rhs) || rhs == lhs) {
+    rhs = target_.scratchInt1();
+    loadInt(instruction.operand(1), rhs);
+  }
   loadInt(instruction.operand(0), lhs);
-  loadInt(instruction.operand(1), rhs);
   emit(mnemonic, {MOperand::makeReg(rhs), MOperand::makeReg(lhs, true)});
   storeResult(instruction, lhs);
 }
 
 void CodeGen::lowerBinaryFloat(const ir::Instruction& instruction, const char* mnemonic) {
-  const MReg lhs = target_.scratchFloat0();
-  const MReg rhs = target_.scratchFloat1();
+  const MReg lhs = destinationFor(instruction, target_.scratchFloat0());
+  MReg rhs = MReg::None;  // see lowerBinaryInt for why the order matters
+  if (!regOf(instruction.operand(1), rhs) || rhs == lhs) {
+    rhs = target_.scratchFloat1();
+    loadFloat(instruction.operand(1), rhs);
+  }
   loadFloat(instruction.operand(0), lhs);
-  loadFloat(instruction.operand(1), rhs);
   emit(mnemonic, {MOperand::makeReg(rhs), MOperand::makeReg(lhs, true)});
   storeResult(instruction, lhs);
 }
@@ -348,13 +489,23 @@ void CodeGen::lowerDivRem(const ir::Instruction& instruction, bool wantRemainder
 
 void CodeGen::lowerCompare(const ir::Instruction& instruction, bool isFloat) {
   const Predicate predicate = instruction.predicate();
-  const MReg result = target_.scratchInt0();
+  // setcc writes a byte, so the result register must have an 8-bit form. Every
+  // allocatable integer register does; the scratch fallback does too.
+  const MReg result = destinationFor(instruction, target_.scratchInt0());
 
   if (!isFloat) {
-    const MReg lhs = target_.scratchInt0();
-    const MReg rhs = target_.scratchInt1();
-    loadInt(instruction.operand(0), lhs);
-    loadInt(instruction.operand(1), rhs);
+    // Both operands are only read, so wherever they already are will do; the
+    // comparison finishes before setcc writes anything.
+    MReg lhs = MReg::None;
+    if (!regOf(instruction.operand(0), lhs)) {
+      lhs = target_.scratchInt0();
+      loadInt(instruction.operand(0), lhs);
+    }
+    MReg rhs = MReg::None;
+    if (!regOf(instruction.operand(1), rhs)) {
+      rhs = target_.scratchInt1();
+      loadInt(instruction.operand(1), rhs);
+    }
     emit("cmpq", {MOperand::makeReg(rhs), MOperand::makeReg(lhs)});
     emit(setccForInt(predicate), {MOperand::makeReg(result, true)}, "8-bit form");
     emit("movzbq", {MOperand::makeReg(result), MOperand::makeReg(result, true)});
@@ -362,10 +513,16 @@ void CodeGen::lowerCompare(const ir::Instruction& instruction, bool isFloat) {
     return;
   }
 
-  const MReg first = target_.scratchFloat0();
-  const MReg second = target_.scratchFloat1();
-  loadFloat(instruction.operand(0), first);
-  loadFloat(instruction.operand(1), second);
+  MReg first = MReg::None;
+  if (!regOf(instruction.operand(0), first)) {
+    first = target_.scratchFloat0();
+    loadFloat(instruction.operand(0), first);
+  }
+  MReg second = MReg::None;
+  if (!regOf(instruction.operand(1), second)) {
+    second = target_.scratchFloat1();
+    loadFloat(instruction.operand(1), second);
+  }
 
   // `comisd b, a` sets the flags for `a ? b`. For < and <= the operands are
   // swapped so the above-family condition can be used, which is false when
@@ -458,9 +615,10 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::AShr: {
       // x86-64 takes a variable shift count only in cl, so the amount cannot
       // be placed freely the way an ordinary binary operand can.
-      const MReg value = target_.scratchInt0();
-      loadInt(instruction.operand(0), value);
+      const MReg value = destinationFor(instruction, target_.scratchInt0());
+      // The count first: `value` may be the register the count lives in.
       loadInt(instruction.operand(1), MReg::RCX);
+      loadInt(instruction.operand(0), value);
       emit(instruction.opcode() == Opcode::Shl ? "shlq" : "sarq",
            {MOperand::makeReg(MReg::RCX), MOperand::makeReg(value, true)},
            "shift count must be in cl");
@@ -475,7 +633,7 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::FDiv: lowerBinaryFloat(instruction, "divsd"); break;
 
     case Opcode::Neg: {
-      const MReg reg = target_.scratchInt0();
+      const MReg reg = destinationFor(instruction, target_.scratchInt0());
       loadInt(instruction.operand(0), reg);
       emit("negq", {MOperand::makeReg(reg, true)});
       storeResult(instruction, reg);
@@ -485,7 +643,7 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::FNeg: {
       // Flip the sign bit rather than computing 0 - x, which would turn -0.0
       // into +0.0.
-      const MReg reg = target_.scratchFloat0();
+      const MReg reg = destinationFor(instruction, target_.scratchFloat0());
       loadFloat(instruction.operand(0), reg);
       module_->needsNegateMask = true;
       emit("xorpd", {MOperand::makeRipLabel(".LCnegmask"), MOperand::makeReg(reg, true)});
@@ -494,7 +652,7 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     }
 
     case Opcode::Not: {
-      const MReg reg = target_.scratchInt0();
+      const MReg reg = destinationFor(instruction, target_.scratchInt0());
       loadInt(instruction.operand(0), reg);
       emit("xorq", {MOperand::makeImm(1), MOperand::makeReg(reg, true)},
            "logical not on i1");
@@ -507,7 +665,7 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
 
     case Opcode::SIToFP: {
       const MReg source = target_.scratchInt0();
-      const MReg destination = target_.scratchFloat0();
+      const MReg destination = destinationFor(instruction, target_.scratchFloat0());
       loadInt(instruction.operand(0), source);
       emit("cvtsi2sdq",
            {MOperand::makeReg(source), MOperand::makeReg(destination, true)});
@@ -520,9 +678,15 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
       break;
 
     case Opcode::Copy: {
-      // Produced by SSA destruction. Coalescing means source and destination
-      // frequently share a slot, in which case the value is already where it
-      // belongs and the move would be pure waste.
+      // Produced by SSA destruction. Source and destination frequently share a
+      // location -- a slot by coalescing, a register by the allocator having
+      // merged the two ends of this very copy -- and then the move is waste.
+      MReg sourceReg = MReg::None;
+      MReg destinationReg = MReg::None;
+      if (regOf(instruction.operand(0), sourceReg) &&
+          regOf(&instruction, destinationReg) && sourceReg == destinationReg) {
+        break;
+      }
       std::int32_t source = 0;
       std::int32_t destination = 0;
       if (slotOf(instruction.operand(0), source) && slotOf(&instruction, destination) &&
@@ -530,7 +694,8 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
         break;
       }
       const bool isFloat = instruction.type()->isF64();
-      const MReg reg = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
+      const MReg reg = destinationFor(
+          instruction, isFloat ? target_.scratchFloat0() : target_.scratchInt0());
       if (isFloat) {
         loadFloat(instruction.operand(0), reg);
       } else {
@@ -542,7 +707,8 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
 
     case Opcode::Load: {
       const bool isFloat = instruction.type()->isF64();
-      const MReg destination = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
+      const MReg destination = destinationFor(
+          instruction, isFloat ? target_.scratchFloat0() : target_.scratchInt0());
       std::int32_t offset = 0;
       if (directSlot(instruction.operand(0), offset)) {
         // Addressing the slot directly avoids computing its address first.
@@ -562,11 +728,16 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::Store: {
       const ir::Value* value = instruction.operand(0);
       const bool isFloat = value->type()->isF64();
-      const MReg source = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
-      if (isFloat) {
-        loadFloat(value, source);
-      } else {
-        loadInt(value, source);
+      // A value already in a register is stored straight from it; only a
+      // constant or a spilled value has to pass through scratch.
+      MReg source = MReg::None;
+      if (!regOf(value, source)) {
+        source = isFloat ? target_.scratchFloat0() : target_.scratchInt0();
+        if (isFloat) {
+          loadFloat(value, source);
+        } else {
+          loadInt(value, source);
+        }
       }
 
       std::int32_t offset = 0;
@@ -587,8 +758,12 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
       break;
 
     case Opcode::CondBr: {
-      const MReg condition = target_.scratchInt0();
-      loadInt(instruction.operand(0), condition);
+      // Test the condition where it already is, when it is anywhere at all.
+      MReg condition = MReg::None;
+      if (!regOf(instruction.operand(0), condition)) {
+        condition = target_.scratchInt0();
+        loadInt(instruction.operand(0), condition);
+      }
       emit("testq", {MOperand::makeReg(condition), MOperand::makeReg(condition)});
       emit("jne", {MOperand::makeLabel(blockLabel(*instruction.successors()[0]))});
       emit("jmp", {MOperand::makeLabel(blockLabel(*instruction.successors()[1]))});
@@ -654,16 +829,34 @@ void CodeGen::lowerFunction(const ir::Function& function, MFunction& out) {
   irFunction_ = nullptr;
 }
 
-MModule CodeGen::run(const ir::Module& module) {
+MModule CodeGen::run(const ir::Module& module, analysis::AnalysisManager& analyses) {
   MModule result;
   result.sourceName = module.sourceName();
   module_ = &result;
   floatLabels_.clear();
+  allocationErrors_.clear();
+  allocations_.clear();
 
   for (const auto& function : module.functions()) {
     if (function->isDeclaration()) {
       continue;  // resolved by the linker against libofrt
     }
+
+    assignment_ = RegisterAssignment{};
+    if (allocator_ == RegAllocKind::Graph) {
+      assignment_ = allocateRegisters(*function, analyses, target_);
+      // Checked here rather than trusted: an allocator that puts two live
+      // values in one register produces code that is wrong in a way no test
+      // reliably catches, so it is verified on every compilation.
+      const std::vector<std::string> errors =
+          verifyAssignment(*function, analyses, target_, assignment_);
+      allocationErrors_.insert(allocationErrors_.end(), errors.begin(), errors.end());
+      if (!errors.empty()) {
+        assignment_ = RegisterAssignment{};  // fall back rather than emit it
+      }
+    }
+    allocations_.push_back(assignment_);
+
     result.functions.emplace_back();
     lowerFunction(*function, result.functions.back());
   }

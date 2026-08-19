@@ -11,55 +11,41 @@ sum:
 .L_sum_entry:
 	pushq      %rbp
 	movq       %rsp, %rbp
-	subq       $144, %rsp                      # frame: 104 local + 32 outgoing
-	movq       %rcx, -8(%rbp)                  # arg n
-	movq       -8(%rbp), %rax                  # store
-	movq       %rax, -16(%rbp)
+	pushq      %rbx                            # callee-saved
+	subq       $72, %rsp                       # frame: 24 local + 32 outgoing
+	movq       %rcx, %r11                      # arg n
+	movq       %r11, -16(%rbp)                 # store
 	movq       $0, %rax                        # store
 	movq       %rax, -24(%rbp)
 	movq       $0, %rax                        # store
 	movq       %rax, -32(%rbp)
 	jmp        .L_sum_while_cond_1             # br
 .L_sum_while_cond_1:
-	movq       -32(%rbp), %rax                 # %t0 = load
-	movq       %rax, -40(%rbp)
-	movq       -16(%rbp), %rax                 # %t1 = load
-	movq       %rax, -48(%rbp)
-	movq       -40(%rbp), %rax                 # %t2 = icmp
-	movq       -48(%rbp), %r10
-	cmpq       %r10, %rax
-	setl       %al                             # 8-bit form
-	movzbq     %al, %rax
-	movq       %rax, -56(%rbp)
-	movq       -56(%rbp), %rax                 # condbr
-	testq      %rax, %rax
+	movq       -32(%rbp), %rbx                 # %t0 = load
+	movq       -16(%rbp), %r11                 # %t1 = load
+	cmpq       %r11, %rbx                      # %t2 = icmp
+	setl       %r11b                           # 8-bit form
+	movzbq     %r11b, %r11
+	testq      %r11, %r11                      # condbr
 	jne        .L_sum_while_body_2
 	jmp        .L_sum_while_end_3
 .L_sum_while_body_2:
-	movq       -24(%rbp), %rax                 # %t3 = load
-	movq       %rax, -64(%rbp)
-	movq       -32(%rbp), %rax                 # %t4 = load
-	movq       %rax, -72(%rbp)
-	movq       -64(%rbp), %rax                 # %t5 = add
-	movq       -72(%rbp), %r10
-	addq       %r10, %rax
-	movq       %rax, -80(%rbp)
-	movq       -80(%rbp), %rax                 # store
-	movq       %rax, -24(%rbp)
-	movq       -32(%rbp), %rax                 # %t6 = load
-	movq       %rax, -88(%rbp)
-	movq       -88(%rbp), %rax                 # %t7 = add
-	movq       $1, %r10
-	addq       %r10, %rax
-	movq       %rax, -96(%rbp)
-	movq       -96(%rbp), %rax                 # store
-	movq       %rax, -32(%rbp)
+	movq       -24(%rbp), %rbx                 # %t3 = load
+	movq       -32(%rbp), %r11                 # %t4 = load
+	movq       %r11, %r10                      # %t5 = add
+	movq       %rbx, %r11
+	addq       %r10, %r11
+	movq       %r11, -24(%rbp)                 # store
+	movq       -32(%rbp), %r11                 # %t6 = load
+	movq       $1, %r10                        # %t7 = add
+	addq       %r10, %r11
+	movq       %r11, -32(%rbp)                 # store
 	jmp        .L_sum_while_cond_1             # br
 .L_sum_while_end_3:
-	movq       -24(%rbp), %rax                 # %t8 = load
-	movq       %rax, -104(%rbp)
-	movq       -104(%rbp), %rax                # ret
-	movq       %rbp, %rsp
+	movq       -24(%rbp), %r11                 # %t8 = load
+	movq       %r11, %rax                      # ret
+	leaq       -8(%rbp), %rsp
+	popq       %rbx                            # restore callee-saved
 	popq       %rbp
 	ret
 
@@ -69,11 +55,11 @@ main:
 .L_main_entry:
 	pushq      %rbp
 	movq       %rsp, %rbp
-	subq       $48, %rsp                       # frame: 8 local + 32 outgoing
+	subq       $32, %rsp                       # frame: 0 local + 32 outgoing
 	movq       $100, %rcx                      # %t0 = call
 	call       sum
-	movq       %rax, -8(%rbp)
-	movq       -8(%rbp), %rcx                  # call
+	movq       %rax, %r11
+	movq       %r11, %rcx                      # call
 	call       print_int
 	movq       $0, %rax                        # ret
 	movq       %rbp, %rsp

@@ -51,11 +51,13 @@ def normalize(text: str) -> list[str]:
     return [ln.rstrip() for ln in text.split("\n") if ln.strip() != ""]
 
 
-def run_case(optiforge: Path, source: Path, workdir: Path, opt: str) -> tuple[bool, str]:
-    exe = workdir / (source.stem + "_" + opt.lstrip("-") + ".exe")
+def run_case(optiforge: Path, source: Path, workdir: Path, opt: str,
+             extra: list[str]) -> tuple[bool, str]:
+    tag = "".join(c for c in opt.lstrip("-") + "".join(extra) if c.isalnum())
+    exe = workdir / (source.stem + "_" + tag + ".exe")
 
     compile_proc = subprocess.run(
-        [str(optiforge), str(source), opt, "-o", str(exe)],
+        [str(optiforge), str(source), opt, *extra, "-o", str(exe)],
         capture_output=True, text=True,
     )
     if compile_proc.returncode != 0:
@@ -88,6 +90,10 @@ def main() -> int:
     parser.add_argument("--dir", required=True, type=Path)
     parser.add_argument("--levels", default="-O0",
                         help="comma-separated optimization levels to run")
+    parser.add_argument("--extra-arg", action="append", default=[],
+                        help="extra compiler flag, repeatable. Used to run the "
+                             "whole suite through --regalloc=naive as well, "
+                             "since ADR-08 keeps that allocator supported.")
     opts = parser.parse_args()
 
     if not opts.optiforge.exists():
@@ -112,8 +118,10 @@ def main() -> int:
                 continue
             for level in levels:
                 total += 1
-                ok, detail = run_case(opts.optiforge, source, workdir, level)
-                label = f"{source.name} [{level}]"
+                ok, detail = run_case(opts.optiforge, source, workdir, level,
+                                      opts.extra_arg)
+                suffix = "".join(" " + a for a in opts.extra_arg)
+                label = f"{source.name} [{level}{suffix}]"
                 if ok:
                     print(f"ok      {label}")
                 else:

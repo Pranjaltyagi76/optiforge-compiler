@@ -44,6 +44,23 @@ public:
   virtual MReg scratchFloat0() const = 0;
   virtual MReg scratchFloat1() const = 0;
 
+  /// Integer registers the graph-colouring allocator may hand out, in the order
+  /// it prefers them.
+  ///
+  /// Deliberately excludes the argument registers, the return register and the
+  /// scratch pair. The code generator's fixed sequences own those -- `idiv`
+  /// needs `rax`/`rdx`, a variable shift needs `cl`, and a call writes every
+  /// argument register in turn -- and reserving them outright is what lets the
+  /// allocator skip pre-colouring and the interference edges that come with it.
+  /// It costs registers; it buys an allocator whose correctness argument fits
+  /// on one page.
+  virtual const std::vector<MReg>& allocatableIntRegisters() const = 0;
+  virtual const std::vector<MReg>& allocatableFloatRegisters() const = 0;
+
+  /// True when the *callee* must preserve this register across a call, so a
+  /// value living in it survives a call and the prologue has to save it.
+  virtual bool isCalleeSaved(MReg reg) const = 0;
+
   virtual std::int32_t stackAlignment() const = 0;
 
   /// Assembly symbol for a source-level name. 64-bit PE/COFF applies no

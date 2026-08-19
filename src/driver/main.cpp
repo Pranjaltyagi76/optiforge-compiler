@@ -24,6 +24,7 @@
 #include "optiforge/passes/Pass.h"
 #include "optiforge/transforms/SSA.h"
 #include "optiforge/backend/CodeGen.h"
+#include "optiforge/backend/RegAlloc.h"
 #include "optiforge/backend/TargetInfo.h"
 #include "optiforge/driver/Toolchain.h"
 #include "optiforge/support/Diagnostic.h"
@@ -191,10 +192,34 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     verifier.printErrors(std::cerr);
     return ExitCode::InternalError;
   }
+  // Destruction rewrote every function, so nothing cached about them still
+  // holds -- and the register allocator is about to ask for liveness.
+  analyses.invalidateAll();
 
   // --- Code generation ---
-  backend::CodeGen codegen(backend::x86_64WindowsTarget());
-  const backend::MModule machine = codegen.run(*module);
+  const backend::RegAllocKind allocator = opts.regalloc == RegAllocChoice::Naive
+                                              ? backend::RegAllocKind::Naive
+                                              : backend::RegAllocKind::Graph;
+  backend::CodeGen codegen(backend::x86_64WindowsTarget(), allocator);
+  const backend::MModule machine = codegen.run(*module, analyses);
+
+  if (opts.printRegAlloc) {
+    for (const backend::RegisterAssignment& allocation : codegen.allocations()) {
+      std::cerr << allocation.summary() << "\n";
+    }
+  }
+
+  if (!codegen.allocationErrors().empty()) {
+    // The allocator already fell back to frame slots for the function it could
+    // not vouch for, so the binary that comes out is still correct -- but a
+    // violation here is a compiler bug and must not pass silently.
+    diags.reportGlobal(DiagSeverity::Error,
+                       "internal compiler error: register allocation is unsound");
+    for (const std::string& error : codegen.allocationErrors()) {
+      std::cerr << "  " << error << "\n";
+    }
+    return ExitCode::InternalError;
+  }
 
   if (opts.emit == EmitStage::Asm) {
     backend::printAssembly(machine, std::cout);

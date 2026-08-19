@@ -903,16 +903,31 @@ With a profile (PGO-09): order blocks so the **most frequent successor falls thr
 ```
 prologue:  push rbp
            mov  rbp, rsp
-           sub  rsp, <frameSize>       ; 16-byte aligned
-           push <callee-saved actually used>
+           push <callee-saved GPRs actually used>   ; before the frame, see below
+           sub  rsp, <frameSize>
+           movups <callee-saved XMMs>, <frame slot> ; SSE has no push
 
-epilogue:  pop  <callee-saved, reverse order>
-           mov  rsp, rbp
+epilogue:  movups <frame slot>, <callee-saved XMMs>
+           lea  rsp, [rbp - 8*N]                    ; N = GPRs pushed
+           pop  <the same GPRs, reverse order>
            pop  rbp
            ret
 ```
 
-Frame size is known only after register allocation decides on spill slots, so prologue/epilogue insertion runs **after** allocation.
+**Corrected in Phase 8**, from a sketch that put the pushes after `sub rsp`.
+Three facts the implementation had to respect and the sketch did not:
+
+- The pushes go **before** the frame, so local slots start at `rbp - 8*N` rather
+  than at `rbp`. Putting them after would leave the pushed registers sitting on
+  top of the outgoing-argument area.
+- `frameSize` gains 8 bytes when N is odd. `rsp` must be 16-byte aligned at
+  every call, and `push rbp` plus N pushes plus the frame is what gets it there;
+  the frame is the only part still free to fix the parity.
+- SSE callee-saved registers have no push. They get frame slots, written
+  **after** `sub rsp` — Windows x64 has no red zone, so nothing may be stored
+  below `rsp`.
+
+Frame size is known only after register allocation decides which values live in memory and which callee-saved registers are used, so prologue/epilogue insertion runs **after** allocation.
 
 ### 11.5 Calling Convention (System V AMD64 — pending ADR-10)
 
@@ -952,6 +967,14 @@ Chaitin–Briggs with coalescing:
 7. Rewrite    : insert spill stores and reloads, then repeat from step 1 (usually 1-2 iterations)
 ```
 
+**Step 7 does not exist in the implementation, and does not need to.** The
+rewrite-and-repeat loop is there because spill code introduces new short live
+ranges the graph has to account for. Here the code generator already computes
+with values that live in memory — that is all the naive allocator ever did — so
+"spill" means only "assign no register", and the reloads use the reserved
+scratch registers, which are not allocatable and so add no live range at all.
+One pass is exact rather than approximate.
+
 **Spill cost heuristic** — the hook where PGO enters the backend:
 
 ```
@@ -961,7 +984,28 @@ profileCost(v) = sum over uses and defs of  blockExecCount(block) / degree(v)
 
 Without a profile, static loop depth is a guess: it assumes every loop runs about ten times and every branch is taken half the time. With a profile, the cost is the *measured* number of executions. A loop the compiler statically assumes is hot but which the profile shows runs twice will stop stealing registers from the loop that actually runs fifty million times. This is a small code change with a disproportionate effect, and it is a good candidate for the first PGO win to implement (PGO-08).
 
-K = 14 integer registers available for allocation (`rsp`, `rbp` reserved; `rax`/`rdx` are constrained around `idiv` but still allocatable elsewhere).
+**K = 8 integer registers** (`r11 rbx rsi rdi r12-r15`) and **10 SSE**
+(`xmm6`–`xmm15`), not the 14 this section originally assumed.
+
+The difference is a decision taken in Phase 8 and worth recording rather than
+quietly correcting. The original figure counted `rax` and `rdx` as "constrained
+around `idiv` but still allocatable elsewhere", which is true and is what a
+production allocator does — by modelling the constraint as a pre-coloured node
+and letting colouring work around it. Doing that means every fixed-register
+instruction (`idiv`, variable shifts, every argument register at every call,
+the return register) becomes a set of pre-coloured nodes and interference edges,
+and each one is a chance to be wrong in a way that miscompiles silently.
+
+Instead the target keeps those registers out of the allocatable pool entirely:
+`rcx rdx r8 r9` carry arguments, `rax` returns and is scratch, `r10` is the
+second scratch, `rsp rbp` are the frame. The allocator then needs no
+pre-colouring at all. Six registers bought for an allocator whose correctness
+argument fits on a page — and, measured, still 63% less memory traffic than the
+naive allocator (metric BE-04).
+
+`r11` is listed first in the pool because it is the only caller-saved register
+in it: handing it out before a callee-saved one saves a push and a pop. It is
+also the one register a value spanning a call may never use.
 
 ---
 

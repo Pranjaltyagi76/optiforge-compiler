@@ -11,54 +11,44 @@ fib:
 .L_fib_entry:
 	pushq      %rbp
 	movq       %rsp, %rbp
-	subq       $128, %rsp                      # frame: 96 local + 32 outgoing
-	movq       %rcx, -8(%rbp)                  # arg n
-	movq       -8(%rbp), %rax                  # store
-	movq       %rax, -16(%rbp)
-	movq       -16(%rbp), %rax                 # %t0 = load
-	movq       %rax, -24(%rbp)
-	movq       -24(%rbp), %rax                 # %t1 = icmp
-	movq       $2, %r10
-	cmpq       %r10, %rax
-	setl       %al                             # 8-bit form
-	movzbq     %al, %rax
-	movq       %rax, -32(%rbp)
-	movq       -32(%rbp), %rax                 # condbr
-	testq      %rax, %rax
+	pushq      %rbx                            # callee-saved
+	subq       $56, %rsp                       # frame: 8 local + 32 outgoing
+	movq       %rcx, %r11                      # arg n
+	movq       %r11, -16(%rbp)                 # store
+	movq       -16(%rbp), %r11                 # %t0 = load
+	movq       $2, %r10                        # %t1 = icmp
+	cmpq       %r10, %r11
+	setl       %r11b                           # 8-bit form
+	movzbq     %r11b, %r11
+	testq      %r11, %r11                      # condbr
 	jne        .L_fib_if_then_1
 	jmp        .L_fib_if_end_2
 .L_fib_if_then_1:
-	movq       -16(%rbp), %rax                 # %t2 = load
-	movq       %rax, -40(%rbp)
-	movq       -40(%rbp), %rax                 # ret
-	movq       %rbp, %rsp
+	movq       -16(%rbp), %r11                 # %t2 = load
+	movq       %r11, %rax                      # ret
+	leaq       -8(%rbp), %rsp
+	popq       %rbx                            # restore callee-saved
 	popq       %rbp
 	ret
 .L_fib_if_end_2:
-	movq       -16(%rbp), %rax                 # %t3 = load
-	movq       %rax, -48(%rbp)
-	movq       -48(%rbp), %rax                 # %t4 = sub
-	movq       $1, %r10
-	subq       %r10, %rax
-	movq       %rax, -56(%rbp)
-	movq       -56(%rbp), %rcx                 # %t5 = call
+	movq       -16(%rbp), %r11                 # %t3 = load
+	movq       $1, %r10                        # %t4 = sub
+	subq       %r10, %r11
+	movq       %r11, %rcx                      # %t5 = call
 	call       fib
-	movq       %rax, -64(%rbp)
-	movq       -16(%rbp), %rax                 # %t6 = load
-	movq       %rax, -72(%rbp)
-	movq       -72(%rbp), %rax                 # %t7 = sub
-	movq       $2, %r10
-	subq       %r10, %rax
-	movq       %rax, -80(%rbp)
-	movq       -80(%rbp), %rcx                 # %t8 = call
+	movq       %rax, %rbx
+	movq       -16(%rbp), %r11                 # %t6 = load
+	movq       $2, %r10                        # %t7 = sub
+	subq       %r10, %r11
+	movq       %r11, %rcx                      # %t8 = call
 	call       fib
-	movq       %rax, -88(%rbp)
-	movq       -64(%rbp), %rax                 # %t9 = add
-	movq       -88(%rbp), %r10
-	addq       %r10, %rax
-	movq       %rax, -96(%rbp)
-	movq       -96(%rbp), %rax                 # ret
-	movq       %rbp, %rsp
+	movq       %rax, %r11
+	movq       %r11, %r10                      # %t9 = add
+	movq       %rbx, %r11
+	addq       %r10, %r11
+	movq       %r11, %rax                      # ret
+	leaq       -8(%rbp), %rsp
+	popq       %rbx                            # restore callee-saved
 	popq       %rbp
 	ret
 
@@ -68,11 +58,11 @@ main:
 .L_main_entry:
 	pushq      %rbp
 	movq       %rsp, %rbp
-	subq       $48, %rsp                       # frame: 8 local + 32 outgoing
+	subq       $32, %rsp                       # frame: 0 local + 32 outgoing
 	movq       $30, %rcx                       # %t0 = call
 	call       fib
-	movq       %rax, -8(%rbp)
-	movq       -8(%rbp), %rcx                  # call
+	movq       %rax, %r11
+	movq       %r11, %rcx                      # call
 	call       print_int
 	movq       $0, %rax                        # ret
 	movq       %rbp, %rsp

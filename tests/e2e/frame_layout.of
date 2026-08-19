@@ -1,0 +1,63 @@
+// Prologue and epilogue arithmetic, at several shapes of frame.
+//
+// rsp has to be 16-byte aligned at every call, and what gets it there is
+// `push rbp`, plus one push per callee-saved GPR the allocator used, plus the
+// frame. An odd number of pushes leaves it eight bytes out and the frame has to
+// correct it — so these functions are built to need different numbers of saves.
+// Callee-saved SSE registers have no push at all and live in frame slots that
+// must not collide with the locals or with the outgoing-argument area.
+//
+// A mistake here does not produce a wrong answer; it crashes inside the C
+// runtime, or corrupts a caller's register. Both are caught by calling out and
+// then using values that had to survive the call.
+//
+// EXPECT-OUTPUT: 6
+// EXPECT-OUTPUT: 6
+// EXPECT-OUTPUT: 16
+// EXPECT-OUTPUT: 16
+// EXPECT-OUTPUT: 30
+// EXPECT-OUTPUT: 30
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 21
+fn one(float a, int n) -> float {
+    float acc = 0.0;
+    int i = 0;
+    while (i < n) { acc = acc + a; i = i + 1; }
+    print_float(acc);
+    return acc;
+}
+
+fn two(float a, float b, int n) -> float {
+    float x = 0.0;
+    float y = 0.0;
+    int i = 0;
+    while (i < n) { x = x + a; y = y + b; i = i + 1; }
+    print_float(x + y);
+    return x + y;
+}
+
+fn three(int p, int q, int r, int n) -> int {
+    int x = 0; int y = 0; int z = 0; int i = 0;
+    while (i < n) { x = x + p; y = y + q; z = z + r; i = i + 1; }
+    print_int(x + y + z);
+    return x + y + z;
+}
+
+// Six live values spanning two calls: every one of them must be in a
+// callee-saved register or a frame slot, and must still be there afterwards.
+fn spanning(int n) -> int {
+    int a = n + 1; int b = n + 2; int c = n + 3;
+    int d = n + 4; int e = n + 5; int f = n + 6;
+    int mid = three(1, 1, 1, 0);
+    int later = three(1, 1, 1, 0);
+    return a + b + c + d + e + f + mid + later;
+}
+
+fn main() -> int {
+    print_float(one(1.5, 4));
+    print_float(two(1.5, 2.5, 4));
+    print_int(three(1, 2, 3, 5));
+    print_int(spanning(0));
+    return 0;
+}

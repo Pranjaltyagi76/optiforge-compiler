@@ -49,9 +49,31 @@ bool parseEmitStage(std::string_view name, EmitStage& out) {
   return true;
 }
 
+std::string_view toString(RegAllocChoice choice) {
+  switch (choice) {
+    case RegAllocChoice::Naive:
+      return "naive";
+    case RegAllocChoice::Graph:
+      return "graph";
+  }
+  return "unknown";
+}
+
+bool parseRegAllocChoice(std::string_view name, RegAllocChoice& out) {
+  if (name == "naive") {
+    out = RegAllocChoice::Naive;
+  } else if (name == "graph") {
+    out = RegAllocChoice::Graph;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 namespace {
 
 constexpr std::string_view kEmitPrefix = "--emit=";
+constexpr std::string_view kRegAllocPrefix = "--regalloc=";
 
 bool startsWith(std::string_view text, std::string_view prefix) {
   return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
@@ -109,6 +131,21 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
 
     if (startsWith(arg, "--print-after=")) {
       out.printAfter = std::string(arg.substr(std::string_view("--print-after=").size()));
+      continue;
+    }
+
+    if (startsWith(arg, kRegAllocPrefix)) {
+      const std::string_view name = arg.substr(kRegAllocPrefix.size());
+      if (!parseRegAllocChoice(name, out.regalloc)) {
+        err << "optiforge: error: unknown register allocator '" << name << "'\n"
+            << "  valid allocators: naive, graph\n";
+        return false;
+      }
+      continue;
+    }
+
+    if (arg == "--print-regalloc") {
+      out.printRegAlloc = true;
       continue;
     }
 
@@ -170,6 +207,7 @@ void printHelp(std::ostream& out) {
          "  -O0                  No optimization (default)\n"
          "  -O1                  Basic optimization\n"
          "  -O2                  Full optimization\n"
+         "  --regalloc=<kind>    Register allocator: naive or graph (default: graph)\n"
          "\n"
          "Diagnostics:\n"
          "  -Werror              Treat warnings as errors\n"
