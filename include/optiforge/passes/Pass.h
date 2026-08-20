@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include "optiforge/support/PgoControls.h"
+
 namespace optiforge::ir {
 class Function;
 class Module;
@@ -49,11 +51,21 @@ public:
   /// explainable. A stream per pass keeps that honest without a singleton.
   void setRemarkStream(std::ostream* stream) { remarks_ = stream; }
 
+  /// Which profile-guided decisions are switched on (metric G-05).
+  ///
+  /// Set by the pass manager alongside the remark stream, for the same reason:
+  /// a pass reads policy from what it was handed, never from a global. The
+  /// default has everything enabled, so a pass constructed outside a pipeline
+  /// -- as the unit tests do -- behaves exactly as it does in one.
+  void setPgoControls(const PgoControls& controls) { pgo_ = controls; }
+
 protected:
   std::ostream* remarks() const { return remarks_; }
+  const PgoControls& pgo() const { return pgo_; }
 
 private:
   std::ostream* remarks_ = nullptr;
+  PgoControls pgo_;
 };
 
 using PassFactory = std::unique_ptr<Pass> (*)();
@@ -110,6 +122,9 @@ public:
   void setVerifyEach(bool value) { verifyEach_ = value; }
   /// Where profile-guided decisions explain themselves (PGO-13). Null disables.
   void setRemarkStream(std::ostream* stream) { remarkStream_ = stream; }
+  /// Which profile-guided decisions may consult the profile (G-05). Forwarded
+  /// to every pass, and consulted here for the cold-code size decision.
+  void setPgoControls(const PgoControls& controls) { pgo_ = controls; }
 
   /// Sweeps taken before the pipeline stopped changing. Metric O-10 caps this
   /// so two passes undoing each other cannot loop forever.
@@ -124,6 +139,7 @@ private:
   std::string printAfter_;
   std::ostream* printStream_ = nullptr;
   std::ostream* remarkStream_ = nullptr;
+  PgoControls pgo_;
   bool printAfterAll_ = false;
   bool verifyEach_ = false;
   unsigned iterations_ = 0;

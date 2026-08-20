@@ -1,0 +1,197 @@
+{
+  "meta": {
+    "date": "2026-08-20 21:52 +0530",
+    "revision": "dd51bdf",
+    "dirty": true,
+    "machine": "windows-mingw",
+    "reps": 12,
+    "warmups": 3,
+    "noise_floor_pct": 1.0
+  },
+  "rows": [
+    {
+      "program": "biased_branch.of",
+      "outputs_identical": true,
+      "o2_ms": 540.1882499863859,
+      "pgo_ms": 539.1227499931119,
+      "full_gain_pct": 0.1976358803793099,
+      "contributions": {
+        "inline": 0.17674991235394621,
+        "unroll": 0.48073319442892837,
+        "regalloc": -0.0949772483454625,
+        "layout": 0.4596798899913934,
+        "cold-size": -0.19225220488199302
+      },
+      "without": {
+        "inline": 0.020885968025363688,
+        "unroll": -0.28309731404961846,
+        "regalloc": 0.2926131287247724,
+        "layout": -0.2620440096120835,
+        "cold-size": 0.3898880852613029
+      },
+      "attributed_pct": 0.8299335435468125,
+      "residual_pct": -0.6322976631675026
+    },
+    {
+      "program": "branch_machine.of",
+      "outputs_identical": true,
+      "o2_ms": 349.92889998829924,
+      "pgo_ms": 301.7223000060767,
+      "full_gain_pct": 15.977141888833435,
+      "contributions": {
+        "inline": 0.07235351125705058,
+        "unroll": -0.14709780409016737,
+        "regalloc": 0.8614345011996871,
+        "layout": 16.048805069654037,
+        "cold-size": -0.09767722843285931
+      },
+      "without": {
+        "inline": 15.904788377576384,
+        "unroll": 16.124239692923602,
+        "regalloc": 15.115707387633748,
+        "layout": -0.07166318082060252,
+        "cold-size": 16.074819117266294
+      },
+      "attributed_pct": 16.73781804958775,
+      "residual_pct": -0.7606761607543167
+    },
+    {
+      "program": "branchy.of",
+      "outputs_identical": true,
+      "o2_ms": 516.5902500157245,
+      "pgo_ms": 519.4275999965612,
+      "full_gain_pct": -0.5462455173455338,
+      "contributions": {
+        "inline": 0.16475287228767677,
+        "unroll": -0.3669763976144935,
+        "regalloc": -0.01754156039782684,
+        "layout": -0.6460371644791185,
+        "cold-size": 0.48077656695605375
+      },
+      "without": {
+        "inline": -0.7109983896332106,
+        "unroll": -0.17926911973104032,
+        "regalloc": -0.528703956947707,
+        "layout": 0.09979164713358468,
+        "cold-size": -1.0270220843015876
+      },
+      "attributed_pct": -0.38502568324770836,
+      "residual_pct": -0.16121983409782548
+    },
+    {
+      "program": "loop_kernel.of",
+      "outputs_identical": true,
+      "o2_ms": 276.69929998228326,
+      "pgo_ms": 297.8727000008803,
+      "full_gain_pct": -7.10820428274711,
+      "contributions": {
+        "inline": -0.4158192216817227,
+        "unroll": -6.847500887659918,
+        "regalloc": -0.5862763983736192,
+        "layout": -0.7343362882443074,
+        "cold-size": -0.06606573989076381
+      },
+      "without": {
+        "inline": -6.692385061065387,
+        "unroll": -0.26070339508719176,
+        "regalloc": -6.521927884373491,
+        "layout": -6.3738679945028025,
+        "cold-size": -7.042138542856346
+      },
+      "attributed_pct": -8.649998535850331,
+      "residual_pct": 1.5417942531032214
+    },
+    {
+      "program": "loop_sum.of",
+      "outputs_identical": true,
+      "o2_ms": 409.58345000399277,
+      "pgo_ms": 400.50744998734444,
+      "full_gain_pct": 2.2661251412264827,
+      "contributions": {
+        "inline": -0.22470792926245764,
+        "unroll": 2.5986231298029794,
+        "regalloc": 0.4740550248819808,
+        "layout": -0.0012001128466554434,
+        "cold-size": 0.3945447243640432
+      },
+      "without": {
+        "inline": 2.4908330704889403,
+        "unroll": -0.3324979885764967,
+        "regalloc": 1.7920701163445019,
+        "layout": 2.267325254073138,
+        "cold-size": 1.8715804168624395
+      },
+      "attributed_pct": 3.2413148369398903,
+      "residual_pct": -0.9751896957134076
+    },
+    {
+      "program": "nbody.of",
+      "outputs_identical": true,
+      "o2_ms": 396.83970002806745,
+      "pgo_ms": 399.2197999905329,
+      "full_gain_pct": -0.596187855041741,
+      "contributions": {
+        "inline": 0.6584961941238698,
+        "unroll": -0.35750614296718997,
+        "regalloc": -1.5403589588492528,
+        "layout": 0.8463253848274288,
+        "cold-size": 0.1397634134787218
+      },
+      "without": {
+        "inline": -1.2546840491656108,
+        "unroll": -0.23868171207455102,
+        "regalloc": 0.9441711038075118,
+        "layout": -1.4425132398691698,
+        "cold-size": -0.7359512685204628
+      },
+      "attributed_pct": -0.2532801093864223,
+      "residual_pct": -0.3429077456553187
+    },
+    {
+      "program": "nested_math.of",
+      "outputs_identical": true,
+      "o2_ms": 174.43014998571016,
+      "pgo_ms": 167.49014999368228,
+      "full_gain_pct": 4.143527241625655,
+      "contributions": {
+        "inline": 0.1840346329046616,
+        "unroll": 4.950863735109934,
+        "regalloc": -0.3363514078170926,
+        "layout": -0.2350057409256312,
+        "cold-size": 1.0796803628087437
+      },
+      "without": {
+        "inline": 3.9594926087209936,
+        "unroll": -0.8073364934842786,
+        "regalloc": 4.479878649442748,
+        "layout": 4.378532982551286,
+        "cold-size": 3.0638468788169115
+      },
+      "attributed_pct": 5.643221582080615,
+      "residual_pct": -1.49969434045496
+    },
+    {
+      "program": "recursive_fib.of",
+      "outputs_identical": true,
+      "o2_ms": 278.45964999869466,
+      "pgo_ms": 278.8381000282243,
+      "full_gain_pct": -0.13572393065772737,
+      "contributions": {
+        "inline": -0.133066525359804,
+        "unroll": 0.2054021776908721,
+        "regalloc": 0.07640529430147369,
+        "layout": -0.06278634006351425,
+        "cold-size": 0.08743592707916026
+      },
+      "without": {
+        "inline": -0.0026574052979233542,
+        "unroll": -0.34112610834859947,
+        "regalloc": -0.21212922495920106,
+        "layout": -0.07293759059421312,
+        "cold-size": -0.22315985773688762
+      },
+      "attributed_pct": 0.1733905336481878,
+      "residual_pct": -0.30911446430591516
+    }
+  ]
+}

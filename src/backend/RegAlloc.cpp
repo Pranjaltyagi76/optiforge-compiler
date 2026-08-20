@@ -120,10 +120,11 @@ double weightForDepth(unsigned depth) {
 class Allocator {
 public:
   Allocator(const ir::Function& function, analysis::AnalysisManager& manager,
-            const TargetInfo& target)
+            const TargetInfo& target, bool useProfileWeights)
       : function_(function),
         target_(target),
-        loops_(manager.get<analysis::LoopAnalysis>(function)) {}
+        loops_(manager.get<analysis::LoopAnalysis>(function)),
+        useProfileWeights_(useProfileWeights) {}
 
   RegisterAssignment run() {
     buildUnits();
@@ -183,7 +184,7 @@ private:
     // the number. A loop the compiler statically believes is hot but which ran
     // twice stops stealing registers from the one that ran fifty million times.
     for (const auto& block : function_.blocks()) {
-      const double weight = block->executionCount > 0
+      const double weight = useProfileWeights_ && block->executionCount > 0
                                 ? static_cast<double>(block->executionCount)
                                 : weightForDepth(loops_.depthOf(block.get()));
       for (const auto& instruction : block->instructions()) {
@@ -740,6 +741,8 @@ private:
   const ir::Function& function_;
   const TargetInfo& target_;
   const analysis::LoopInfo& loops_;
+  /// False makes spill cost ignore measured block counts (--disable-pgo=regalloc).
+  bool useProfileWeights_ = true;
 
   std::vector<Unit> units_;
   std::unordered_map<const ir::BasicBlock*, analysis::BitSet> liveOut_;
@@ -778,11 +781,12 @@ std::string RegisterAssignment::summary() const {
 
 RegisterAssignment allocateRegisters(const ir::Function& function,
                                      analysis::AnalysisManager& manager,
-                                     const TargetInfo& target) {
+                                     const TargetInfo& target,
+                                     bool useProfileWeights) {
   if (function.isDeclaration()) {
     return {};
   }
-  Allocator allocator(function, manager, target);
+  Allocator allocator(function, manager, target, useProfileWeights);
   RegisterAssignment assignment = allocator.run();
   assignment.function = function.name();
   return assignment;

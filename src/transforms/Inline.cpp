@@ -54,8 +54,13 @@ public:
   }
 
   bool run(ir::Function& function, analysis::AnalysisManager& manager) override {
+    // `--disable-pgo=inline` withholds the profile from this pass alone, which
+    // makes it take exactly the path an unprofiled build takes -- the static
+    // budget for every call site. That equivalence is what lets the attribution
+    // subtraction in methodology.md section 5 mean anything (G-05, G-06).
     const profile::ProfileData* profile =
-        manager.getCached<analysis::ProfileAnalysis>(function);
+        pgo().inlining ? manager.getCached<analysis::ProfileAnalysis>(function)
+                       : nullptr;
     const bool measured = profile != nullptr && profile->isValid();
 
     bool changed = false;

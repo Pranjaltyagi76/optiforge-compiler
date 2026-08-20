@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "date": "2026-08-20 22:00 +0530",
+    "revision": "dd51bdf",
+    "dirty": true,
+    "machine": "windows-mingw",
+    "reps": 12,
+    "warmups": 3,
+    "noise_floor_pct": 1.0
+  },
+  "rows": [
+    {
+      "program": "branch_machine_b.of",
+      "profile_from": "branch_machine.of",
+      "outputs_identical": true,
+      "baseline_ms": 322.38404999952763,
+      "matched_ms": 338.4413000312634,
+      "crossed_ms": 320.56824999745004,
+      "matched_gain_pct": -4.744471206750611,
+      "crossed_gain_pct": 0.5664316419645488,
+      "retention_pct": -11.938772884923585,
+      "crossed_remarks": [
+        "profile: match rate 3/3 function(s) (100.0%)",
+        "inline: @step:if.end.10: cold call site to @report; not inlined",
+        "loop-unroll: @main:while.cond.1: hot, but its shape is not one this unroller handles",
+        "layout: 10 block(s) reordered, 10 jump(s) became fall-through"
+      ]
+    },
+    {
+      "program": "loop_kernel_b.of",
+      "profile_from": "loop_kernel.of",
+      "outputs_identical": true,
+      "baseline_ms": 316.0480499791447,
+      "matched_ms": 310.01970000215806,
+      "crossed_ms": 321.69144999352284,
+      "matched_gain_pct": 1.9445054546355145,
+      "crossed_gain_pct": -1.754289712857382,
+      "retention_pct": -90.21778307051407,
+      "crossed_remarks": [
+        "profile: match rate 2/2 function(s) (100.0%)",
+        "loop-unroll: @kernel:while.cond.4: not hot; left alone",
+        "loop-unroll: @kernel:while.cond.1: not hot; left alone",
+        "loop-unroll: @kernel:while.cond.7: trip count 350000000 measured; unrolling by 8",
+        "loop-unroll: @kernel:while.cond.4: not hot; left alone",
+        "loop-unroll: @kernel:while.cond.1: not hot; left alone",
+        "layout: 14 block(s) reordered, 12 jump(s) became fall-through"
+      ]
+    },
+    {
+      "program": "nested_math_b.of",
+      "profile_from": "nested_math.of",
+      "outputs_identical": true,
+      "baseline_ms": 225.0118000083603,
+      "matched_ms": 225.05434998311102,
+      "crossed_ms": 202.86835002480075,
+      "matched_gain_pct": -0.018906532912565943,
+      "crossed_gain_pct": 10.91518217644718,
+      "retention_pct": null,
+      "crossed_remarks": [
+        "profile: match rate 2/2 function(s) (100.0%)",
+        "loop-unroll: @kernel:while.cond.4: trip count 400 measured; unrolling by 8",
+        "loop-unroll: @kernel:while.cond.1: not hot; left alone",
+        "layout: 11 block(s) reordered, 11 jump(s) became fall-through"
+      ]
+    }
+  ]
+}

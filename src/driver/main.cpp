@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -142,6 +143,19 @@ profile::ProfileData loadAndValidateProfile(const Options& opts, const ir::Modul
             " function(s); profile-guided optimization will do little");
   }
 
+  if (opts.pgoRemarks) {
+    // Metric G-03, and the first thing to read before believing any speedup.
+    // A match rate near zero makes every pass below take its no-profile path
+    // while the build still succeeds -- so a PGO result that is identical to
+    // -O2 is a match-rate bug far more often than it is a real null finding.
+    std::cerr << "profile: match rate " << functionsMatched << "/" << functions
+              << " function(s)";
+    if (functions != 0) {
+      std::cerr << " (" << std::fixed << std::setprecision(1) << rate * 100.0 << "%)";
+    }
+    std::cerr << "\n";
+  }
+
   return data;
 }
 
@@ -231,6 +245,16 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     // AnalysisManager to ask, and both register allocation and block layout
     // need per-block frequencies.
     transforms::annotateBlockCounts(*module, *profileData);
+
+    if (opts.pgoRemarks && !opts.pgo.everythingEnabled()) {
+      // Printed on every attribution run, so the output itself records which
+      // decision was switched off rather than trusting whoever kept the log.
+      std::cerr << "pgo: disabled decision(s):";
+      for (const std::string_view name : disabledPgoDecisionNames(opts.pgo)) {
+        std::cerr << " " << name;
+      }
+      std::cerr << "\n";
+    }
   }
 
   if (opts.optLevel > 0) {
@@ -245,6 +269,7 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     // --- Optimization pipeline ---
     passes::PassManager pipeline;
     passes::buildPipeline(pipeline, opts.optLevel, opts.disabledPasses);
+    pipeline.setPgoControls(opts.pgo);
     pipeline.setPrintAfterAll(opts.printAfterAll);
     pipeline.setPrintAfter(opts.printAfter);
     pipeline.setVerifyEach(opts.verifyEach);
@@ -349,7 +374,9 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
                                               : backend::RegAllocKind::Graph;
   backend::CodeGen codegen(backend::x86_64WindowsTarget(), allocator);
   codegen.setProfileLayout(std::move(profileLayout));
-  codegen.setProfileGuidedLayout(profileData != nullptr && profileData->isValid());
+  codegen.setProfileGuidedLayout(profileData != nullptr && profileData->isValid() &&
+                                 opts.pgo.layout);
+  codegen.setProfileGuidedSpillWeights(opts.pgo.regalloc);
   const backend::MModule machine = codegen.run(*module, analyses);
 
   if (opts.pgoRemarks && profileData != nullptr) {

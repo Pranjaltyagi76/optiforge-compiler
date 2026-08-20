@@ -1,0 +1,68 @@
+// ★ The showcase (methodology.md §2). Constructed so that the only heat signal
+// a static optimizer has points the *wrong way*.
+//
+// One function, two loops, ten values live across both of them:
+//
+//   - The nest is at loop depth 2. Loop depth is the sole static heat estimate
+//     this compiler has -- 10^depth, in RegAlloc.cpp -- so it scores the inner
+//     body at 100 per block, the highest weight anywhere in the function. It
+//     executes 400 times.
+//
+//   - The flat loop below it is at depth 1, scored at 10 per block, one tenth
+//     of the nest. It executes 350,000,000 times.
+//
+// The static ranking is wrong by six orders of magnitude, and it is wrong in
+// the direction that costs the most: registers get spent on the loop that runs
+// 400 times, and spilled out of the one that runs three hundred and fifty
+// million. A profile replaces the guess with the count, and nothing else in
+// the program changes.
+//
+// Ten accumulators, deliberately: eight allocatable integer registers means the
+// allocator cannot keep everything and has to choose, which is the decision
+// under test. With three accumulators it would fit, choose nothing, and measure
+// nothing.
+fn kernel(int deepRows, int hotTrips) -> int {
+    int a0 = 1;
+    int a1 = 2;
+    int a2 = 3;
+    int a3 = 5;
+    int a4 = 7;
+    int a5 = 11;
+    int a6 = 13;
+    int a7 = 17;
+    int a8 = 19;
+    int a9 = 23;
+
+    // Depth 2, 400 iterations. Looks hottest, is not.
+    int r = 0;
+    while (r < deepRows) {
+        int c = 0;
+        while (c < 20) {
+            a0 = a0 + c;
+            a1 = a1 + r;
+            a2 = a2 + c - r;
+            a3 = a3 + r * 2;
+            a4 = a4 + c * 3;
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+
+    // Depth 1, 350,000,000 iterations. Looks cooler, dominates the run.
+    int i = 0;
+    while (i < hotTrips) {
+        a5 = a5 + i;
+        a6 = a6 + a5 - i;
+        a7 = a7 + i * 2;
+        a8 = a8 + a7 - a6;
+        a9 = a9 + a8 - a5;
+        i = i + 1;
+    }
+
+    return a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9;
+}
+
+fn main() -> int {
+    print_int(kernel(20, 350000000));
+    return 0;
+}

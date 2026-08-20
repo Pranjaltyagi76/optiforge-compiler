@@ -1,0 +1,75 @@
+// Float-heavy inner loop with loop-invariant subexpressions and high pressure
+// on the float register file (methodology.md §2: the `nbody` shape, testing
+// LICM and G-08).
+//
+// Three bodies held in eighteen scalar `float`s, because the language has no
+// arrays (docs/language.md §8). That is the honest constraint and it is worth
+// stating plainly: this has the *shape* of an n-body integrator -- pairwise
+// force accumulation over a fixed body count, then a position update, stepped
+// in a tight loop -- and not its physics. There is no `sqrt` builtin, so the
+// pairwise term is a polynomial in the separation rather than an inverse
+// square. What the benchmark is for is the register and scheduling behaviour of
+// a long float dependency chain, and that it has.
+//
+// `half`, `damp` and `scale` are computed from `dt` inside the loop on purpose:
+// they are loop-invariant, LICM should hoist all three into the preheader, and
+// whether it does is visible in `--emit=asm`.
+fn simulate(int steps, float dt) -> float {
+    float x1 = 1.0;  float y1 = 0.0;  float z1 = 0.5;
+    float x2 = -1.0; float y2 = 0.5;  float z2 = -0.5;
+    float x3 = 0.25; float y3 = -1.0; float z3 = 1.0;
+
+    float vx1 = 0.0; float vy1 = 0.1;  float vz1 = 0.0;
+    float vx2 = 0.1; float vy2 = 0.0;  float vz2 = -0.1;
+    float vx3 = -0.1; float vy3 = -0.1; float vz3 = 0.05;
+
+    int step = 0;
+    while (step < steps) {
+        // Loop-invariant: three multiplies and a subtract that do not depend on
+        // anything the loop changes.
+        float half = dt * 0.5;
+        float damp = 1.0 - dt * 0.001;
+        float scale = dt * 0.25;
+
+        // Pairwise separations.
+        float dx12 = x1 - x2;  float dy12 = y1 - y2;  float dz12 = z1 - z2;
+        float dx13 = x1 - x3;  float dy13 = y1 - y3;  float dz13 = z1 - z3;
+        float dx23 = x2 - x3;  float dy23 = y2 - y3;  float dz23 = z2 - z3;
+
+        float r12 = dx12 * dx12 + dy12 * dy12 + dz12 * dz12 + 0.25;
+        float r13 = dx13 * dx13 + dy13 * dy13 + dz13 * dz13 + 0.25;
+        float r23 = dx23 * dx23 + dy23 * dy23 + dz23 * dz23 + 0.25;
+
+        float f12 = scale / (r12 * r12);
+        float f13 = scale / (r13 * r13);
+        float f23 = scale / (r23 * r23);
+
+        vx1 = (vx1 - dx12 * f12 - dx13 * f13) * damp;
+        vy1 = (vy1 - dy12 * f12 - dy13 * f13) * damp;
+        vz1 = (vz1 - dz12 * f12 - dz13 * f13) * damp;
+
+        vx2 = (vx2 + dx12 * f12 - dx23 * f23) * damp;
+        vy2 = (vy2 + dy12 * f12 - dy23 * f23) * damp;
+        vz2 = (vz2 + dz12 * f12 - dz23 * f23) * damp;
+
+        vx3 = (vx3 + dx13 * f13 + dx23 * f23) * damp;
+        vy3 = (vy3 + dy13 * f13 + dy23 * f23) * damp;
+        vz3 = (vz3 + dz13 * f13 + dz23 * f23) * damp;
+
+        x1 = x1 + vx1 * half;  y1 = y1 + vy1 * half;  z1 = z1 + vz1 * half;
+        x2 = x2 + vx2 * half;  y2 = y2 + vy2 * half;  z2 = z2 + vz2 * half;
+        x3 = x3 + vx3 * half;  y3 = y3 + vy3 * half;  z3 = z3 + vz3 * half;
+
+        step = step + 1;
+    }
+
+    // A checksum, not an answer. Printing every coordinate would make the
+    // expected output brittle against the last bit of a float; one sum still
+    // catches a miscompile that changes any of them (methodology.md §8).
+    return x1 + y1 + z1 + x2 + y2 + z2 + x3 + y3 + z3;
+}
+
+fn main() -> int {
+    print_float(simulate(15000000, 0.001));
+    return 0;
+}

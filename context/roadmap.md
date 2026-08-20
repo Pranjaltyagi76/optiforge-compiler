@@ -462,13 +462,82 @@ refuses the shape that did it.
 ### Phase 12 — Benchmarking & Evidence
 **Goal:** Prove it. Numbers, not claims.
 
-- [ ] Benchmark suite: matrix multiply, n-body, sieve, recursive fib, an array/loop kernel, a branch-heavy state machine.
-- [ ] Harness: run each benchmark at `-O0`, `-O1`, `-O2`, and `-O2 --use-profile`, N repetitions, reporting median and variance.
-- [ ] Metrics: wall time, instruction count, generated code size, compile time, instrumentation overhead.
-- [ ] Results checked into `metrics/results/` with the machine specification recorded.
-- [ ] Write-up: which PGO decisions produced which gains, and where PGO *lost* (honesty is part of the deliverable).
+- [x] Benchmark suite: eight programs in `bench/programs/`, plus three
+      workload-B variants in `bench/workloads/` for profile portability.
+      **Two of the six shapes `methodology.md` §2 asks for could not be
+      written:** `matmul` and `sieve` both need arrays, which the language does
+      not have and which the risk register below freezes until this phase
+      completes. `nbody` is present with the *shape* of an n-body inner loop —
+      pairwise accumulation over fixed bodies, 35 floats live against 16
+      registers — and says in its own header that the physics is not real, there
+      being no `sqrt`. The gap is recorded rather than papered over with two
+      programs carrying the names but not the properties.
+- [x] Harness: `bench/harness/run.py` builds and times every program at `-O0`,
+      `-O1`, `-O2`, instrumented and `-O2 --use-profile`, 15 repetitions after
+      three discarded warm-ups, **interleaved** across configurations, reporting
+      median, minimum, IQR and IQR/median. It refuses to run without a machine
+      spec, and writes both the immutable raw JSON and the citable table.
+- [x] Metrics: wall time (Q-01), spread (Q-02), code size (Q-03), IR and machine
+      instruction counts (Q-04, Q-05), spills and pressure (Q-07, Q-08), compile
+      time and peak memory (P-01, P-02, P-03, P-05), instrumentation overhead
+      (I-01), profile match rate (G-03).
+- [x] Results checked into `metrics/results/`, and the **machine specification
+      completed** — hardware, toolchain, and a measured **1.0% noise floor**,
+      which was a hard blocker: the spec previously said in as many words that
+      no runtime figure could be published from this machine.
+- [x] Write-up: which PGO decisions produced which gains, and where PGO lost.
+      `--disable-pgo=<decision>` was added to the driver so `methodology.md` §5's
+      attribution protocol could run literally, one decision switched off at a
+      time.
 
-**Exit criteria:** A results table showing PGO beating `-O2` on at least three benchmarks, with the wins explained mechanistically.
+**Status: COMPLETE** (verified: 383 unit assertions, 46 golden cases, 48
+end-to-end runs at three levels plus 32 through `--regalloc=naive`, 5 profile
+programs across 4 profile states each, 8 benchmark programs whose five
+configurations all agree byte-for-byte, and 120 randomly generated programs
+through the differential fuzzer with 0 mismatches. Clean -Werror build in Debug
+and Release. Four result files dated 2026-08-20 and the phase evaluation in
+`metrics/reports/phase-12-evaluation.md`.)
+
+**Exit criteria:** A results table showing PGO beating `-O2` on at least three
+benchmarks, with the wins explained mechanistically.
+
+**Met.** Three benchmarks beat `-O2` above the 1.0% noise floor, and the
+attribution sweep names the decision responsible for each:
+
+| Program | PGO vs `-O2` | Attributed to |
+|---|---:|---|
+| `branch_machine.of` | **+15.8%** | block layout, +16.0 |
+| `nested_math.of` | +5.2% | unrolling, +5.0 |
+| `loop_sum.of` | +2.1% | unrolling, +2.6 |
+| `loop_kernel.of` | **−7.1%** | unrolling, **−6.8** |
+
+Four further programs sit inside the noise floor and are listed with the rest in
+`metrics/results/2026-08-20-phase12-benchmarks.md` §8.
+
+**Three things this phase established that were previously assertions:**
+
+1. **Two of the five profile-guided decisions do all the work**, and each on one
+   program shape. Layout is worth +16 points where a function has one dominant
+   path and nothing anywhere else. Unrolling is worth +5.0 and +2.6 where a short
+   body is dominated by loop control — and −6.8 where it is not. Inlining,
+   cold-code size mode and profile-weighted spill costs never register outside
+   the noise floor in either direction, except once, negatively.
+2. **PGO lost 7% on the showcase benchmark, having made the right decision.**
+   `loop_kernel.of` was built so loop depth ranks its two loops backwards by six
+   orders of magnitude; the profile corrects the ranking and unrolls the loop
+   that really is hot, and the program gets slower, because the unroller has a
+   trip-count threshold where it needs a cost model. This was **not fixed before
+   reporting**, and §5 of the phase evaluation says why: any threshold that
+   rescued it would be a number tuned against the one benchmark that exposed it.
+3. **Layout pays in proportion to how concentrated the hot path is, not to how
+   accurately the profile was measured.** The portability run drives the same
+   state machine so that no single path dominates, and a *perfectly accurate*
+   profile of it is worth **−4.7%**.
+
+**The headline target NFR-10 / G-01 — ≥10% on ≥3 benchmarks — is NOT met.** One
+benchmark exceeds 10%. The phase exit criterion and NFR-10 are different bars and
+only the first is cleared; the evaluation says so in §1 rather than letting the
+met criterion stand in for the missed target.
 
 ---
 
@@ -506,7 +575,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | M4 | "It optimizes" | P7 | Same output, roughly 30–50% fewer IR instructions at `-O2` |
 | M5 | **"It allocates registers"** | P8 | ✅ **REACHED** — `sum.of`'s loop body is three instructions and no memory access, down from twelve and eight |
 | M6 | **"It profiles"** | P9–P10 | ✅ **REACHED** — `.prof` written and hand-verified, and the report names the hot function and hot loop of a benchmark built to have one of each |
-| M7 | ⭐ **"PGO beats -O2"** | P11–P12 | ✅ **REACHED for P11** — `nested_math.of` is 5.5% faster under profile guidance, predicted then measured; the full benchmark table is P12 |
+| M7 | ⭐ **"PGO beats -O2"** | P11–P12 | ✅ **REACHED** — three benchmarks beat `-O2` above a measured 1.0% noise floor (+15.8%, +5.2%, +2.1%), each traced to a named decision by the `--disable-pgo=` attribution sweep. One benchmark loses 7%, and that is reported too. |
 
 ---
 
@@ -523,16 +592,19 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | ~~Register allocator miscompiles under pressure~~ **RETIRED 2026-08-19** | — | — | Mitigated as planned: `--regalloc=naive` is kept and the whole end-to-end suite runs through it, `tests/e2e/register_pressure.of` holds 22 values live against 8 registers, and every compilation verifies the assignment against independently recomputed live ranges rather than trusting it. |
 | Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme and a source hash in the header, both landed in Phase 9. **One known gap:** instrumentation splits critical edges, so an instrumented build contains `crit.edge.N` blocks an ordinary build does not. The BRANCH and FUNCTION records that Phase 11 actually consumes name blocks that exist in both; the extra BLOCK records simply will not match, and Phase 10's match rate must not count them as staleness. |
 | Instrumentation perturbs the behaviour it measures | Medium | Medium | Instrument late in the pipeline; measure and document overhead; prefer edge counters over block counters where equivalent |
-| PGO shows no measurable win | Medium | **Partly realized** | Mitigated as planned. Two of five benchmarks win; three show nothing and each is explained. Block layout in particular is correct, visibly better, and worth 0.4% — a function that fits in L1 gains nothing from reordering, exactly as System_design.md §16.5 predicted. Reported rather than quietly dropped. |
+| PGO shows no measurable win | Medium | **Partly realized, now quantified** | Phase 12: three of eight benchmarks win (+15.8%, +5.2%, +2.1%), four are inside the noise floor, one loses 7%. Every one is attributed to a named decision. The mitigation was "report rather than quietly drop", and that is what `metrics/reports/phase-12-evaluation.md` §0 does. **NFR-10's ≥10% on three benchmarks is missed**, with one benchmark over 10%. |
+| **The unroller has no cost model** | High | **Realized in Phase 12** | It has a trip-count threshold and a body-shape guard, and neither can express "this body is already issue-limited". It is simultaneously the largest positive contributor in the attribution table (+5.0) and the largest negative (−6.8 on `loop_kernel.of`). Not patched with a constant tuned against the benchmark that exposed it; recorded as Phase 13's second priority. |
+| The benchmark corpus is entirely compute-bound | Medium | Certain until arrays exist | Layout and cold-code placement would pay most on memory-bound code, and no program in the corpus is memory-bound, because `matmul` and `sieve` both need arrays. Phase 13's first priority. |
+| Profile-guided layout can lose where no path dominates | Medium | **Realized in Phase 12** | Measured at −4.7% on `branch_machine_b.of`, whose state machine cycles through three paths in rotation so a *perfectly accurate* profile still gives layout nothing to commit to. Mitigation — decline to commit when no path dominates — is open. |
 | Debugging generated assembly consumes all available time | Medium | High | Invest early in `--emit=asm` readability, IR-to-source line comments, and a small assembly test harness |
 
 ---
 
 ## 8. Definition of Done (project level)
 
-- [ ] `optiforge` builds clean from a fresh clone with one documented command.
-- [ ] All Phase 0–12 exit criteria met.
-- [ ] Test suite green: lexer, parser, sema, IR, analysis, opt, codegen, end-to-end, PGO.
-- [ ] Benchmark results committed with machine specifications.
-- [ ] `docs/` explains: the language, the IR, the `.prof` format, how to add a new pass, how to add a new target.
-- [ ] A written report answering: *what did profile guidance actually buy, and why?*
+- [x] `optiforge` builds clean from a fresh clone with one documented command (`deployment.md` §2).
+- [x] All Phase 0–12 exit criteria met. **NFR-10's ≥10%-on-three target is separately missed** — see Phase 12 above; the exit criteria and that target are different bars.
+- [x] Test suite green: lexer, parser, sema, IR, analysis, opt, codegen, end-to-end, PGO — 383 unit assertions, 46 golden cases, 5 CTest suites.
+- [x] Benchmark results committed with machine specifications — four files in `metrics/results/` dated 2026-08-20, `metrics/machines/windows-mingw.md` complete with a measured noise floor.
+- [ ] `docs/` explains: the language, the IR, the `.prof` format, how to add a new pass, **how to add a new target** — the last is still missing.
+- [x] A written report answering: *what did profile guidance actually buy, and why?* — `metrics/reports/phase-12-evaluation.md` §0, with the evidence in `metrics/results/2026-08-20-pgo-attribution.md`.

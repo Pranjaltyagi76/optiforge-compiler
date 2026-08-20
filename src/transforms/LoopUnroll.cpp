@@ -400,8 +400,12 @@ public:
   }
 
   bool run(ir::Function& function, analysis::AnalysisManager& manager) override {
+    // `--disable-pgo=unroll` withholds the profile, and this pass does nothing
+    // at all without one -- so disabling it removes unrolling entirely rather
+    // than falling back to a static guess (G-05, G-07).
     const profile::ProfileData* profile =
-        manager.getCached<analysis::ProfileAnalysis>(function);
+        pgo().unrolling ? manager.getCached<analysis::ProfileAnalysis>(function)
+                        : nullptr;
     if (profile == nullptr || !profile->isValid()) {
       return false;  // nothing measured, nothing to unroll on
     }

@@ -3,6 +3,7 @@
 
 #include "TestHarness.h"
 #include "optiforge/support/Diagnostic.h"
+#include "optiforge/support/PgoControls.h"
 #include "optiforge/support/SourceManager.h"
 
 using namespace optiforge;
@@ -277,4 +278,84 @@ TEST("an empty source line is skipped rather than mis-rendered") {
   diags.error({f, 2, 1}, "on a blank line");
 
   CHECK_EQ(out.str(), std::string("e.of:2:1: error: on a blank line\n"));
+}
+
+// ---------------------------------------------------------------------------
+// PgoControls
+//
+// The attribution flag (metric G-05). A misspelled decision name has to be
+// rejected: an attribution run that silently disabled nothing measures the
+// full speedup and credits it to a decision that was never switched off.
+// ---------------------------------------------------------------------------
+
+TEST("every decision starts enabled") {
+  const PgoControls controls;
+  CHECK(controls.everythingEnabled());
+  CHECK(controls.inlining && controls.unrolling && controls.regalloc);
+  CHECK(controls.layout && controls.coldSize);
+}
+
+TEST("each decision name disables exactly its own decision") {
+  {
+    PgoControls c;
+    CHECK(disablePgoDecision("inline", c));
+    CHECK(!c.inlining);
+    CHECK(c.unrolling && c.regalloc && c.layout && c.coldSize);
+    CHECK(!c.everythingEnabled());
+  }
+  {
+    PgoControls c;
+    CHECK(disablePgoDecision("unroll", c));
+    CHECK(!c.unrolling);
+    CHECK(c.inlining && c.regalloc && c.layout && c.coldSize);
+  }
+  {
+    PgoControls c;
+    CHECK(disablePgoDecision("regalloc", c));
+    CHECK(!c.regalloc);
+    CHECK(c.inlining && c.unrolling && c.layout && c.coldSize);
+  }
+  {
+    PgoControls c;
+    CHECK(disablePgoDecision("layout", c));
+    CHECK(!c.layout);
+    CHECK(c.inlining && c.unrolling && c.regalloc && c.coldSize);
+  }
+  {
+    PgoControls c;
+    CHECK(disablePgoDecision("cold-size", c));
+    CHECK(!c.coldSize);
+    CHECK(c.inlining && c.unrolling && c.regalloc && c.layout);
+  }
+}
+
+TEST("an unknown decision name is rejected and changes nothing") {
+  PgoControls c;
+  CHECK(!disablePgoDecision("unrol", c));
+  CHECK(!disablePgoDecision("", c));
+  CHECK(!disablePgoDecision("Inline", c));  // case matters
+  CHECK(c.everythingEnabled());
+}
+
+TEST("the disabled-name list comes from the same table as everything else") {
+  PgoControls c;
+  CHECK(disabledPgoDecisionNames(c).empty());
+  CHECK(disablePgoDecision("unroll", c));
+  CHECK(disablePgoDecision("layout", c));
+  const std::vector<std::string_view> off = disabledPgoDecisionNames(c);
+  CHECK_EQ(off.size(), static_cast<std::size_t>(2));
+  CHECK(off[0] == "unroll");
+  CHECK(off[1] == "layout");
+}
+
+TEST("the decision list is what the attribution table iterates") {
+  const std::vector<std::string_view> names = pgoDecisionNames();
+  CHECK_EQ(names.size(), static_cast<std::size_t>(5));
+  // Every advertised name must actually disable something, or --help and the
+  // harness would offer a decision the compiler does not implement.
+  for (const std::string_view name : names) {
+    PgoControls c;
+    CHECK(disablePgoDecision(name, c));
+    CHECK(!c.everythingEnabled());
+  }
 }

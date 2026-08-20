@@ -5,6 +5,8 @@
 #include <vector>
 #include <string_view>
 
+#include "optiforge/support/PgoControls.h"
+
 namespace optiforge {
 
 /// Process exit codes (System_design.md §17.3).
@@ -83,6 +85,10 @@ struct Options {
   double hotThreshold = 80.0;
   /// Explain every profile-guided decision on stderr (PGO-13).
   bool pgoRemarks = false;
+  /// Which profile-guided decisions may consult the profile (Phase 12, G-05).
+  /// Everything is on unless `--disable-pgo=` turns one off; a disabled
+  /// decision takes the same path an unprofiled build takes.
+  PgoControls pgo;
   std::string printAfter;
   std::vector<std::string> disabledPasses;
   bool showHelp = false;

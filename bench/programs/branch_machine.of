@@ -1,0 +1,55 @@
+// A state machine with strongly biased transitions and a cold error path
+// (methodology.md §2: the `branch-machine` shape, testing G-09 and G-10).
+//
+// `step` is dispatched a hundred and thirty million times. Within it every
+// state's "stay here" arm is taken about 98% of the time and its transition arm
+// about 2%, which is a bias no static heuristic can see: to the compiler
+// `input % 97 == 0` is just a comparison, as likely as not.
+//
+// With a profile, block layout puts the common arm on the fall-through and
+// sinks the rare ones past the return (G-09).
+//
+// `report` is the error path. It is reachable -- state 3 is a real state the
+// machine can be in -- but the workload never drives it there, so it runs zero
+// times while still appearing in the profile with a count. That is what makes
+// it *cold* rather than *unknown*, and cold is what triggers the -O1 size
+// pipeline (G-10). A function the profile has never heard of is left alone,
+// deliberately, because "not measured" is not the same claim as "never ran".
+fn report(int state, int input) -> int {
+    int acc = 0;
+    int k = 0;
+    while (k < 8) {
+        acc = acc + state * k - input;
+        k = k + 1;
+    }
+    return acc % 4;
+}
+
+fn step(int state, int input) -> int {
+    if (state == 0) {
+        if (input % 97 == 0) { return 1; }
+        return 0;
+    }
+    if (state == 1) {
+        if (input % 89 == 0) { return 2; }
+        return 1;
+    }
+    if (state == 2) {
+        if (input % 83 == 0) { return 0; }
+        return 2;
+    }
+    return report(state, input);
+}
+
+fn main() -> int {
+    int state = 0;
+    int acc = 0;
+    int i = 0;
+    while (i < 130000000) {
+        state = step(state, i);
+        acc = acc + state;
+        i = i + 1;
+    }
+    print_int(acc);
+    return 0;
+}

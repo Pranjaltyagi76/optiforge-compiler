@@ -225,6 +225,24 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       continue;
     }
 
+    if (startsWith(arg, "--disable-pgo=")) {
+      const std::string_view name =
+          arg.substr(std::string_view("--disable-pgo=").size());
+      if (!disablePgoDecision(name, out.pgo)) {
+        // Rejected rather than ignored. An attribution run whose flag was
+        // misspelled disables nothing, measures the full speedup and reports it
+        // as one decision's contribution -- a wrong number that looks right.
+        err << "optiforge: error: unknown profile-guided decision '" << name << "'\n"
+            << "  valid decisions:";
+        for (const std::string_view known : pgoDecisionNames()) {
+          err << " " << known;
+        }
+        err << "\n";
+        return false;
+      }
+      continue;
+    }
+
     if (arg == "--keep-temps") {
       out.keepTemps = true;
       continue;
@@ -282,6 +300,9 @@ void printHelp(std::ostream& out) {
          "  --profile-report=<f> Print a hot-path report for <f> and exit\n"
          "  --hot-threshold=<%>  Cumulative share that defines hot (default: 80)\n"
          "  --pgo-remarks        Explain every profile-guided decision\n"
+         "  --disable-pgo=<d>    Make one decision take its no-profile path, for\n"
+         "                       attribution (inline, unroll, regalloc, layout,\n"
+         "                       cold-size)\n"
          "\n"
          "Diagnostics:\n"
          "  -Werror              Treat warnings as errors\n"

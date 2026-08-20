@@ -926,7 +926,8 @@ MModule CodeGen::run(const ir::Module& module, analysis::AnalysisManager& analys
 
     assignment_ = RegisterAssignment{};
     if (allocator_ == RegAllocKind::Graph) {
-      assignment_ = allocateRegisters(*function, analyses, target_);
+      assignment_ = allocateRegisters(*function, analyses, target_,
+                                      profileSpillWeights_);
       // Checked here rather than trusted: an allocator that puts two live
       // values in one register produces code that is wrong in a way no test
       // reliably catches, so it is verified on every compilation.

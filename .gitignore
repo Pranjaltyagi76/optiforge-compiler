@@ -26,10 +26,17 @@ a.out
 
 # Metrics: raw harness output is regenerable noise.
 # Commit the raw data behind a published result by placing it in a published/ dir.
+#
+# The re-inclusion of the run directories is load-bearing and must not be
+# tidied away. Git does not descend into an excluded directory, so a negation
+# for a path *inside* one never gets the chance to match: without
+# "!metrics/raw/*/" below, the published/ rules are dead text and every
+# published result silently loses the samples behind it.
 metrics/raw/**
 !metrics/raw/.gitkeep
-!metrics/raw/**/published/
-!metrics/raw/**/published/**
+!metrics/raw/*/
+!metrics/raw/*/published/
+!metrics/raw/*/published/**
 
 # Python tooling
 __pycache__/

@@ -109,17 +109,23 @@ Defined in full in [`metric-catalog.md`](metric-catalog.md). Summary:
 
 ## 6. The Headline Result
 
-One table matters more than all the others. It belongs in `results/`, gets regenerated whenever the PGO passes change, and is the centrepiece of the final report:
+One table matters more than all the others. It is the centrepiece of the final report, and it is regenerated whenever the PGO passes change.
+
+**Measured 2026-08-20** on [`windows-mingw`](machines/windows-mingw.md), noise floor **1.0%**, median of 15 interleaved repetitions. Full table with every configuration in [`results/2026-08-20-phase12-benchmarks.md`](results/2026-08-20-phase12-benchmarks.md); the Why column comes from the disable-one-decision-at-a-time sweep in [`results/2026-08-20-pgo-attribution.md`](results/2026-08-20-pgo-attribution.md).
 
 | Benchmark | `-O0` | `-O1` | `-O2` | `-O2 +PGO` | **PGO vs `-O2`** | Why |
-|---|---|---|---|---|---|---|
-| matmul | — | — | — | — | — | *(unroll factor from measured trip count)* |
-| nbody | — | — | — | — | — | |
-| sieve | — | — | — | — | — | |
-| fib-recursive | — | — | — | — | — | *(hot-call-site inlining)* |
-| branch-machine | — | — | — | — | — | *(block layout on biased branch)* |
-| loop-kernel | — | — | — | — | — | |
-| **Median** | | | | | **target: ≥10% (NFR-10)** | |
+|---|---:|---:|---:|---:|---:|---|
+| `branch_machine` | 384.4 | 340.3 | 340.3 | 294.0 | **+15.8%** | block layout, +16.0 attributed — one dominant path among four states |
+| `nested_math` | 295.2 | 173.7 | 175.2 | 166.6 | **+5.2%** | unrolling, +5.0 — measured trip count 400, factor 8 |
+| `loop_sum` | 618.6 | 407.3 | 406.5 | 398.1 | **+2.1%** | unrolling, +2.6 — same mechanism, longer body |
+| `biased_branch` | 536.2 | 531.7 | 531.9 | 529.6 | +0.4% | inside the noise floor — the loop's `idiv` costs more than every branch around it |
+| `branchy` | 512.8 | 510.1 | 509.0 | 509.2 | −0.0% | inside the floor — the unroller refuses a loop whose body is a call, deliberately |
+| `nbody` | 488.3 | 402.3 | 397.1 | 398.5 | −0.4% | profile-weighted spill costs, −1.5 — one flat loop, so the profile says only that everything is equally hot |
+| `recursive_fib` | 283.7 | 280.1 | 279.4 | 281.3 | −0.7% | inside the floor — no loops at all |
+| `loop_kernel` | 762.6 | 305.4 | 274.3 | 295.2 | **−7.1%** | **unrolling, −6.8** — right decision, no cost model; see the results file §8 |
+| **Median** | | | | | **+0.1%** | target ≥10% on ≥3 benchmarks (NFR-10): **not met**, 1 benchmark over 10% |
+
+Times in ms. **Three benchmarks beat `-O2` above the noise floor, which is the Phase 12 exit criterion, and it is met. NFR-10's ≥10% on three is a different bar and is missed.** Both statements belong here; neither substitutes for the other.
 
 The **Why** column is mandatory. A speedup you cannot attribute to a specific PGO decision is a speedup you cannot defend, and may well be measurement noise.
 

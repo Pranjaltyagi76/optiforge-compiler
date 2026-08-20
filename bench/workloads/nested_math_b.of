@@ -1,0 +1,29 @@
+// Workload B for `nested_math.of`: the *same code*, driven differently.
+//
+// Metric G-13. Real deployments collect a profile on one workload and run the
+// binary on another, so a speedup measured with the profile applied to the very
+// run it came from is the best case and not the interesting one. These variants
+// change only `main` -- every function the profile describes is character for
+// character the one it was collected from -- so the profile still matches by
+// name and the only thing that has shifted is what the program actually does.
+//
+// Workload A runs the inner loop 400 times per entry, 600,000 times over.
+// Workload B runs it 3 times per entry, 80,000,000 times over. The product
+// is 240,000,000 inner iterations either way, so the two do the same amount
+// of arithmetic -- but a profile collected on A measures a trip count of 400
+// and unrolls by 8, which on B is eight copies of a loop that runs three
+// times.
+fn kernel(int rows, int cols) -> int {
+    int acc = 0;
+    int r = 0;
+    while (r < rows) {
+        int c = 0;
+        while (c < cols) {
+            acc = acc + r * c - (r + c);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return acc;
+}
+fn main() -> int { print_int(kernel(80000000, 3)); return 0; }

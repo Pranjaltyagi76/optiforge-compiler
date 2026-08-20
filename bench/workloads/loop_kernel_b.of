@@ -1,0 +1,58 @@
+// Workload B for `loop_kernel.of`: the *same code*, driven differently.
+//
+// Metric G-13. Real deployments collect a profile on one workload and run the
+// binary on another, so a speedup measured with the profile applied to the very
+// run it came from is the best case and not the interesting one. These variants
+// change only `main` -- every function the profile describes is character for
+// character the one it was collected from -- so the profile still matches by
+// name and the only thing that has shifted is what the program actually does.
+//
+// Workload A runs the flat depth-1 loop 350,000,000 times and the depth-2
+// nest 400 times. Workload B swaps them: the nest runs 350,000,000 inner
+// iterations and the flat loop runs 20. A profile from A points every
+// decision at the loop that is now cold.
+fn kernel(int deepRows, int hotTrips) -> int {
+    int a0 = 1;
+    int a1 = 2;
+    int a2 = 3;
+    int a3 = 5;
+    int a4 = 7;
+    int a5 = 11;
+    int a6 = 13;
+    int a7 = 17;
+    int a8 = 19;
+    int a9 = 23;
+
+    // Depth 2, 400 iterations. Looks hottest, is not.
+    int r = 0;
+    while (r < deepRows) {
+        int c = 0;
+        while (c < 20) {
+            a0 = a0 + c;
+            a1 = a1 + r;
+            a2 = a2 + c - r;
+            a3 = a3 + r * 2;
+            a4 = a4 + c * 3;
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+
+    // Depth 1, 350,000,000 iterations. Looks cooler, dominates the run.
+    int i = 0;
+    while (i < hotTrips) {
+        a5 = a5 + i;
+        a6 = a6 + a5 - i;
+        a7 = a7 + i * 2;
+        a8 = a8 + a7 - a6;
+        a9 = a9 + a8 - a5;
+        i = i + 1;
+    }
+
+    return a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9;
+}
+
+fn main() -> int {
+    print_int(kernel(17500000, 20));
+    return 0;
+}

@@ -24,6 +24,9 @@ Profiling:
   --profile-report=<f> Print a hot-path report for <f> and exit
   --hot-threshold=<%>  Cumulative share that defines hot (default: 80)
   --pgo-remarks        Explain every profile-guided decision
+  --disable-pgo=<d>    Make one decision take its no-profile path, for
+                       attribution (inline, unroll, regalloc, layout,
+                       cold-size)
 
 Diagnostics:
   -Werror              Treat warnings as errors

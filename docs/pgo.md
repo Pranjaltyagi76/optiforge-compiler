@@ -158,3 +158,40 @@ pass does can change what the program did when it ran. Keeping profiles in a
 separate map was not an optimization — before it, the first pass that changed
 anything threw the profile away, and every profile-guided decision after that
 silently took the no-profile path while looking like it worked.
+
+---
+
+## 6. Switching one decision off (`--disable-pgo=`)
+
+Added in Phase 12 for metric G-05. Each of the five decisions above can be made
+to take its **no-profile path** on its own:
+
+```bash
+optiforge prog.of -O2 --use-profile=prog.prof --disable-pgo=unroll
+```
+
+| Name | Turns off |
+|---|---|
+| `inline` | the raised budget at hot call sites, and the refusal at cold ones |
+| `unroll` | profile-driven unrolling entirely — this pass does nothing without a profile |
+| `regalloc` | measured block counts as spill cost; loop depth is used instead |
+| `layout` | hot-chain block layout; the fall-through cleanup still runs |
+| `cold-size` | the `-O1` pipeline for cold functions |
+
+The point of "takes its no-profile path" rather than "behaves some third way" is
+that it makes subtraction meaningful: the difference between a full profiled
+build and one with a single decision disabled is that decision's contribution,
+and nothing else. `docs/benchmarking.md` §3 is how that is actually run.
+
+An unknown name is rejected with a usage error rather than ignored. An
+attribution run whose flag was misspelled would disable nothing, measure the full
+speedup, and credit it to a decision that was never switched off.
+
+`--pgo-remarks` also reports, from Phase 12 onward:
+
+- the **profile match rate** (metric G-03) — how many of this module's functions
+  the profile actually describes. This is the first thing to check when a
+  profiled build behaves exactly like `-O2`: a collapsed match rate makes every
+  pass here fall back silently while the build still succeeds.
+- which decisions, if any, were disabled — so an attribution run's own output
+  records what it was measuring.

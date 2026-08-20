@@ -96,9 +96,15 @@ struct RegisterAssignment {
 /// Values coalesced onto a common frame slot by SSA destruction -- every copy
 /// belonging to one phi -- are merged into a single allocation unit before the
 /// graph is built. They must share a location, so they must share a register.
+///
+/// `useProfileWeights` is how `--disable-pgo=regalloc` is expressed (G-05,
+/// G-08). False makes spill cost fall back to 10^loopDepth for every block even
+/// when the IR carries measured counts -- which is what an unprofiled build
+/// does, so the two builds differ in this decision and nothing else.
 RegisterAssignment allocateRegisters(const ir::Function& function,
                                      analysis::AnalysisManager& manager,
-                                     const TargetInfo& target);
+                                     const TargetInfo& target,
+                                     bool useProfileWeights = true);
 
 /// Recomputes liveness and checks the assignment against it.
 ///

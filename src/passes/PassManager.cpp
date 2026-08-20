@@ -101,7 +101,7 @@ bool PassManager::run(ir::Module& module, analysis::AnalysisManager& manager) {
       // instruction-cache pressure rather than direct execution time, and code
       // that never runs should not be spending compile time or code size on
       // unrolling and inlining.
-      const bool cold = isCold(*function, manager);
+      const bool cold = pgo_.coldSize && isCold(*function, manager);
 
       for (std::size_t i = 0; i < passes_.size(); ++i) {
         Pass& pass = *passes_[i];
@@ -111,6 +111,7 @@ bool PassManager::run(ir::Module& module, analysis::AnalysisManager& manager) {
         ++statistics_[i].runs;
 
         pass.setRemarkStream(remarkStream_);
+        pass.setPgoControls(pgo_);
         const bool changed = pass.run(*function, manager);
         if (!changed) {
           continue;

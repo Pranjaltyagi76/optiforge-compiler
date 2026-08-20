@@ -83,6 +83,11 @@ public:
   /// Off unless a profile was supplied; the fall-through cleanup runs either way.
   void setProfileGuidedLayout(bool value) { profileLayout_ = value; }
 
+  /// Let the register allocator price spills by measured block counts. On by
+  /// default; `--disable-pgo=regalloc` turns it off so the allocator's
+  /// contribution to a speedup can be measured on its own (G-05, G-08).
+  void setProfileGuidedSpillWeights(bool value) { profileSpillWeights_ = value; }
+
   /// Blocks moved and jumps removed across the whole module.
   const LayoutResult& layout() const { return layout_; }
 
@@ -165,6 +170,7 @@ private:
   /// instructions.
   const ir::Instruction* fusedCompare_ = nullptr;
   bool profileLayout_ = false;
+  bool profileSpillWeights_ = true;
   LayoutResult layout_;
 };
 

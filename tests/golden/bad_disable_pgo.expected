@@ -1,0 +1,6 @@
+=== exit ===
+2
+=== stdout ===
+=== stderr ===
+optiforge: error: unknown profile-guided decision 'unrol'
+  valid decisions: inline unroll regalloc layout cold-size
