@@ -9,11 +9,12 @@ add_executable(of_unit_tests
   unit/test_irgen.cpp
   unit/test_codegen.cpp
   unit/test_regalloc.cpp
+  unit/test_profile.cpp
   unit/test_analysis.cpp
   unit/test_ssa.cpp
   unit/test_passes.cpp)
 target_link_libraries(of_unit_tests PRIVATE
-  of_target_x86_64 of_backend of_transforms of_passes of_analysis of_irgen of_ir of_frontend of_support optiforge_options)
+  of_target_x86_64 of_backend of_transforms of_passes of_analysis of_profile of_irgen of_ir of_frontend of_support optiforge_options)
 target_include_directories(of_unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unit")
 
 add_test(NAME unit COMMAND of_unit_tests)
@@ -55,6 +56,18 @@ if(Python3_Interpreter_FOUND)
             "--levels=-O0,-O2"
             "--extra-arg=--regalloc=naive")
   set_tests_properties(e2e-naive PROPERTIES TIMEOUT 300)
+
+  # --- Profile tests (Phase 9) --------------------------------------------
+  #
+  # Each program carries the counts it must produce, worked out from the source
+  # by hand. The runner also builds each program *without* instrumentation and
+  # requires identical output, which is PROF-11.
+  add_test(NAME profile
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/run_profile.py"
+            --optiforge "$<TARGET_FILE:optiforge>"
+            --dir "${CMAKE_CURRENT_SOURCE_DIR}/pgo")
+  set_tests_properties(profile PROPERTIES TIMEOUT 300)
 else()
   message(WARNING
     "Python 3 not found; golden-file and end-to-end tests will be skipped. "

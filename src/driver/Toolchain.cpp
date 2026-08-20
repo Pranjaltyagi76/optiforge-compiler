@@ -111,9 +111,27 @@ bool Toolchain::assemble(const std::string& asmPath, const std::string& objectPa
   return run(command, "assembler");
 }
 
-bool Toolchain::link(const std::string& objectPath, const std::string& outputPath) const {
-  const std::string command = std::string(toolDriver()) + " " + quote(objectPath) + " -L" +
-                              quote(runtimeDir_) + " -lofrt -o " + quote(outputPath);
+bool Toolchain::hasProfileRuntime() const {
+  if (runtimeDir_.empty()) {
+    return false;
+  }
+  std::error_code ec;
+  return std::filesystem::exists(std::filesystem::path(runtimeDir_) / "libofprof.a", ec);
+}
+
+bool Toolchain::link(const std::string& objectPath, const std::string& outputPath,
+                     bool withProfileRuntime) const {
+  std::string command = std::string(toolDriver()) + " " + quote(objectPath) + " -L" +
+                        quote(runtimeDir_) + " -lofrt";
+  if (withProfileRuntime) {
+    // --whole-archive, because nothing in the program *references* libofprof:
+    // it works entirely through a constructor that registers an atexit hook, so
+    // an ordinary archive link would find no undefined symbol to satisfy and
+    // drop the object -- and the program would run, print nothing wrong, and
+    // silently write no profile at all.
+    command += " -Wl,--whole-archive -lofprof -Wl,--no-whole-archive";
+  }
+  command += " -o " + quote(outputPath);
   return run(command, "linker");
 }
 

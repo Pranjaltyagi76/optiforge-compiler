@@ -1,0 +1,1 @@
+--profile-report=tests/pgo/fixtures/corrupt.prof

@@ -1,0 +1,32 @@
+=== exit ===
+0
+=== stdout ===
+OptiForge Profile Report - tests/pgo/fixtures/hotpath.of
+Format version 1, built at -O2 by optiforge-0.1.0
+Source hash 0x5ba301fc135fd104, 1 run(s), 200,105 samples
+
+HOT FUNCTIONS
+  compute                 calls =           20     99.98% of executions   [HOT]
+
+WARM FUNCTIONS
+  main                    calls =            1      0.02% of executions   [WARM]
+
+COLD FUNCTIONS
+  rarely                  calls =            1      0.00% of executions   [COLD]
+
+LOOPS
+  compute:while.cond.1        entries =           20   iterations =        100,000
+                              avg trip count = 5000.0   [HOT]
+                              -> unroll candidate (factor 8)
+  main:while.cond.1           entries =            1   iterations =             20
+                              avg trip count = 20.0   [WARM]
+
+BIASED BRANCHES  (over 90% one-sided)
+  compute:while.cond.1        taken  99.98%  /  not-taken   0.02%
+  main:while.cond.1           taken  95.24%  /  not-taken   4.76%
+  rarely:entry                taken 100.00%  /  not-taken   0.00%
+
+SUMMARY
+  2 hot, 4 warm, 5 cold block(s) (1 never executed)
+  hot threshold: 50.0% cumulative, floor 1,000 executions
+=== stderr ===

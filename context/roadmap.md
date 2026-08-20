@@ -311,13 +311,48 @@ metrics/results/2026-08-19-phase8-register-allocation.md.)
 ### Phase 9 — Instrumentation & Runtime Profiling
 **Goal:** `optiforge prog.of --profile -o prog_inst` produces a binary that writes `prog.prof` on exit.
 
-- [ ] Instrumentation pass over IR, run late (after optimization) so IDs are stable and the instrumented layout matches the optimized one.
-- [ ] Counter allocation: one per function entry, one per basic block, one per branch edge (taken/not-taken), one per loop header.
-- [ ] Efficient counter increments — a direct memory increment on a static counter array, no function call in the hot path.
-- [ ] Optional lightweight timing for function-level wall time (opt-in).
-- [ ] Runtime library `libofprof`: counter storage, `atexit` dump hook, `.prof` writer, environment overrides (`OPTIFORGE_PROFILE_OUT`).
-- [ ] **Stable IDs:** deterministic `function:block` naming that survives recompilation, plus a source-hash stamp in the profile header.
-- [ ] `.prof` format specification (documented in `architectural_design.md`), text-first for debuggability.
+- [x] Instrumentation pass over IR, run late (ADR-05) so the measured CFG is the
+      optimized one the profile-guided build will also see. New `profinc` opcode,
+      which is why the pass needed no special case anywhere in the printer,
+      verifier or code generator.
+- [x] Counter allocation. **One counter per basic block, and nothing else.** The
+      function entry count, both branch outcomes and the loop entry and iteration
+      counts are all *derived* from block counters by the compiler, which writes
+      the derivation into a static table the runtime walks. Four counter kinds
+      would be four times the hot-path cost and four numbers that can disagree
+      with each other; deriving them makes the four arithmetically consistent by
+      construction. Branch outcomes are derivable because critical edges are
+      split first, after which each successor of a conditional branch has exactly
+      one predecessor and its block counter *is* that edge's count.
+- [x] Efficient increments: one `incq __ofprof_counters+8n(%rip)`. No call, no
+      register saved, nothing the register allocator has to know about.
+- [x] Optional per-function wall time behind `--profile-time`, off by default
+      because unlike a counter increment it is a real call. Recursion is charged
+      for its whole call tree once rather than once per level.
+- [x] `libofprof`: counter storage, `atexit` dump registered from a constructor
+      so the program's source needs no change (PROF-07), the `.prof` writer, and
+      `$OPTIFORGE_PROFILE_OUT` overriding the path baked in at compile time.
+      Linked with `--whole-archive` and only for `--profile` builds: it works
+      entirely through that constructor, so an ordinary archive link would find
+      no undefined symbol, drop the object, and silently write no profile.
+- [x] **Stable IDs:** counters are numbered in block order per function, and the
+      records name `function block` exactly as the IR labels them. The header
+      carries the source hash, the `-O` level and the compiler version, which is
+      what lets Phase 10 tell a stale profile from a current one.
+- [x] `.prof` format specification: [`docs/profile-format.md`](../docs/profile-format.md),
+      line-oriented text (ADR-07), versioned, with the validation table Phase 10
+      will implement.
+
+**Deferred, priority C:** merging several runs into one profile (PROF-14). The
+`RUNS` header field exists and is always 1, so adding it later is a reader
+change rather than a format change.
+
+**Status: COMPLETE** (verified: 4 profile tests whose counts are written into the
+source by hand before the compiler is run, PROF-11 checked on every end-to-end
+program at every optimization level and on fuzzer-generated programs, clean
+-Werror build in Debug and Release. Metric PROF-13 = 12.9% worst-case overhead
+against a 40% target, recorded in
+metrics/results/2026-08-19-phase9-instrumentation.md.)
 
 **Exit criteria:** Running the instrumented binary yields a `.prof` whose counts are hand-verifiable on a small loop program. Instrumentation overhead documented (target: under 40% slowdown).
 
@@ -326,14 +361,46 @@ metrics/results/2026-08-19-phase8-register-allocation.md.)
 ### Phase 10 — Profile Ingestion & Hot-Path Detection
 **Goal:** Turn a `.prof` file into decisions the optimizer can query.
 
-- [ ] `.prof` parser and validator (version check, source-hash check, malformed-file tolerance).
-- [ ] `ProfileData` analysis: per-function counts, per-block counts, per-edge probabilities, loop trip counts.
-- [ ] Block-frequency propagation to fill gaps and sanity-check flow conservation.
-- [ ] Hot/Warm/Cold classification with a configurable threshold (`--hot-threshold=`), defaulting to a percentile rule rather than an absolute count.
-- [ ] Staleness handling: if the source hash differs, warn and either degrade to partial matching or ignore the profile — **never miscompile**.
-- [ ] `optiforge --profile-report=prog.prof` — human-readable hot function, hot loop, and branch-bias report.
+- [x] `.prof` parser and validator in `of_profile`, which depends on `of_support`
+      and nothing else (architectural_design.md rule 6). Version check, source
+      hash, unknown record types ignored once for forward compatibility,
+      malformed lines dropped one warning per kind rather than one per line.
+- [x] `ProfileData`: per-function counts, per-block counts, branch probabilities,
+      loop trip counts, and per-function wall time when it was collected.
+- [x] Flow conservation, checked from the profile alone: a branch's two outcomes
+      must sum to its block's count, and a loop's entries plus iterations must
+      sum to its header's. Both follow from where the counters are placed, so a
+      violation means the file is not describing a real execution. Reported;
+      counts kept as advisory. **Block-frequency propagation is not needed and
+      not implemented** — every block carries its own counter, so there are no
+      gaps to fill.
+- [x] Hot/Warm/Cold classification, relative with an absolute floor, threshold
+      configurable by `--hot-threshold=` (PGO-04). `Unknown` is a fourth state
+      and not a synonym for cold: "never ran" and "never measured" justify
+      opposite decisions.
+- [x] **Functions are weighted by the work done inside them, not by their entry
+      count.** A departure from §15.1, and the reason for it is in the fixture:
+      `compute` is called twenty times, runs five thousand iterations each, holds
+      99.98% of the execution — and the entry-count rule calls it cold.
+- [x] Staleness: hash mismatch, `-O` level mismatch and a sub-50% match rate each
+      produce their own warning, and all of them still produce a correct binary.
+- [x] `--profile-report=<file>` as a mode of its own, needing no input program.
+- [x] `ProfileAnalysis` binds a loaded profile into the AnalysisManager (PGO-02).
+      Passes reach it through `getCached`, which returns null when no profile was
+      supplied — the fallback path every profile-guided pass must have.
+
+**Status: COMPLETE** (verified: 21 profile unit tests, 7 golden cases covering
+the report and every rejection path, and fault injection in `tests/run_profile.py`
+that recompiles every profile program with a missing, corrupt and mismatched
+profile and requires byte-identical output. Clean -Werror build in Debug and
+Release.)
 
 **Exit criteria:** The report correctly names the hot function and hot loop in a benchmark designed to have exactly one of each. A corrupt or stale profile produces a warning and a correct binary.
+
+Both demonstrated: `tests/pgo/fixtures/hotpath.of` has exactly one hot function
+(`compute`, 99.98% of executions from twenty calls) and one hot loop
+(`compute:while.cond.1`, trip count 5000), with `rarely` cold and one block never
+executed. The report on it is checked in as `tests/golden/profile_report.expected`.
 
 ---
 
@@ -399,7 +466,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | M3 | ⭐ **"It runs"** | P4 | ✅ **REACHED** — `./fib.exe` prints 832040 |
 | M4 | "It optimizes" | P7 | Same output, roughly 30–50% fewer IR instructions at `-O2` |
 | M5 | **"It allocates registers"** | P8 | ✅ **REACHED** — `sum.of`'s loop body is three instructions and no memory access, down from twelve and eight |
-| M6 | "It profiles" | P9–P10 | A `.prof` file plus a hot-path report identifying the real hot loop |
+| M6 | **"It profiles"** | P9–P10 | ✅ **REACHED** — `.prof` written and hand-verified, and the report names the hot function and hot loop of a benchmark built to have one of each |
 | M7 | ⭐ **"PGO beats -O2"** | P11–P12 | Benchmark table with measured speedup |
 
 ---
@@ -415,7 +482,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | An optimistic analysis treats "not yet known" as "cannot happen" | High | **Realized in Phase 7.5** | Both SCCP miscompiles were this. Any lattice-based pass must guarantee every value leaves the bottom element, and every edge that can fire is eventually marked. |
 | No sanitizers on MinGW, so QA-07 cannot be met | Medium | Certain | Consequence of ADR-10. Memory bugs must be caught by design and review; Phase 3 found a teardown use-after-free by inspection, which is the standard this now requires. |
 | ~~Register allocator miscompiles under pressure~~ **RETIRED 2026-08-19** | — | — | Mitigated as planned: `--regalloc=naive` is kept and the whole end-to-end suite runs through it, `tests/e2e/register_pressure.of` holds 22 values live against 8 registers, and every compilation verifies the assignment against independently recomputed live ranges rather than trusting it. |
-| Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme, source hash in the header, and a loud warning on mismatch (Phases 9–10) |
+| Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme and a source hash in the header, both landed in Phase 9. **One known gap:** instrumentation splits critical edges, so an instrumented build contains `crit.edge.N` blocks an ordinary build does not. The BRANCH and FUNCTION records that Phase 11 actually consumes name blocks that exist in both; the extra BLOCK records simply will not match, and Phase 10's match rate must not count them as staleness. |
 | Instrumentation perturbs the behaviour it measures | Medium | Medium | Instrument late in the pipeline; measure and document overhead; prefer edge counters over block counters where equivalent |
 | PGO shows no measurable win | Medium | Medium | Design benchmarks with genuinely biased branches and hot loops; if a pass shows no win, report that honestly — a negative result with analysis is still a result |
 | Debugging generated assembly consumes all available time | Medium | High | Invest early in `--emit=asm` readability, IR-to-source line comments, and a small assembly test harness |

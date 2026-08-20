@@ -1,0 +1,30 @@
+OPTIFORGE_PROFILE 1
+SOURCE tests/pgo/fixtures/hotpath.of
+SRCHASH 0x5ba301fc135fd104
+OPTLEVEL 2
+COMPILER optiforge-0.1.0
+RUNS 1
+TOTAL_SAMPLES 200105
+
+FUNCTION rarely 1
+FUNCTION compute 20
+FUNCTION main 1
+
+BLOCK rarely entry 1
+BLOCK rarely if.then.1 1
+BLOCK rarely if.end.2 0
+BLOCK compute entry 20
+BLOCK compute while.cond.1 100020
+BLOCK compute while.body.2 100000
+BLOCK compute while.end.3 20
+BLOCK main entry 1
+BLOCK main while.cond.1 21
+BLOCK main while.body.2 20
+BLOCK main while.end.3 1
+
+BRANCH rarely entry taken=1 not_taken=0
+BRANCH compute while.cond.1 taken=100000 not_taken=20
+BRANCH main while.cond.1 taken=20 not_taken=1
+
+LOOP compute while.cond.1 entries=20 iterations=100000
+LOOP main while.cond.1 entries=1 iterations=20

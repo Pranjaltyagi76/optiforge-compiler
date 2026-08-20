@@ -1,6 +1,7 @@
 add_library(of_transforms STATIC
   Mem2Reg.cpp
   SSADestruction.cpp
+  Instrument.cpp
   ScalarPasses.cpp
   SCCP.cpp
   GVN.cpp

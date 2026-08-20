@@ -62,6 +62,25 @@ struct Options {
   bool printAfterAll = false;
   bool verifyEach = false;
   bool printRegAlloc = false;
+
+  // --- Profiling (Phase 9) ---
+  /// Build an instrumented binary that writes a `.prof` when it exits.
+  bool profile = false;
+  /// Also accumulate per-function wall time. Opt-in, because unlike a counter
+  /// increment this puts a real call in the hot path.
+  bool profileTime = false;
+  /// Path the instrumented binary writes to unless $OPTIFORGE_PROFILE_OUT says
+  /// otherwise. Defaults to the output's stem plus `.prof`.
+  std::string profileOut;
+
+  // --- Profile consumption (Phase 10) ---
+  /// Profile to compile against. Loading it never affects correctness: a
+  /// missing, corrupt or stale file produces a warning and an ordinary build.
+  std::string useProfile;
+  /// Print a hot-path report for this profile and exit. Needs no input file.
+  std::string profileReport;
+  /// Cumulative share of executions that defines "hot" (PGO-04).
+  double hotThreshold = 80.0;
   std::string printAfter;
   std::vector<std::string> disabledPasses;
   bool showHelp = false;

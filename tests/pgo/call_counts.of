@@ -1,0 +1,33 @@
+// Function entry counts, and a branch whose two arms run different numbers of
+// times. classify is called six times: three arguments are negative, one is
+// zero and two are positive.
+//
+// LEVEL: -O0
+// EXPECT-OUTPUT: -1
+// EXPECT-OUTPUT: -1
+// EXPECT-OUTPUT: -1
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 1
+// EXPECT-OUTPUT: 1
+// EXPECT-PROF: FUNCTION classify 6
+// EXPECT-PROF: FUNCTION main 1
+// EXPECT-PROF: BRANCH classify entry taken=3 not_taken=3
+fn classify(int n) -> int {
+    if (n < 0) {
+        return -1;
+    }
+    if (n > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+fn main() -> int {
+    print_int(classify(-3));
+    print_int(classify(-2));
+    print_int(classify(-1));
+    print_int(classify(0));
+    print_int(classify(1));
+    print_int(classify(2));
+    return 0;
+}

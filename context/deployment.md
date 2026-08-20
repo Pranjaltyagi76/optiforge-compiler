@@ -508,7 +508,7 @@ Every one has a working default. None is required for normal use.
 | **Pre-4** | **⚠ Resolve the target-platform decision (§2) and update ADR-10** |
 | 4 | `libofrt` builds and links; assembler/linker invocation works; install layout established |
 | 8 | ✅ `--regalloc=naive\|graph` wired through the driver, defaulting to graph; `--print-regalloc` reports what the allocator did |
-| 9 | `libofprof` builds and links; `.prof` written to a configurable path |
-| 10 | `--profile-report` available as a standalone mode |
+| 9 | ✅ `libofprof` builds and installs beside `libofrt`; linked only for `--profile` and with `--whole-archive`, since it works through a constructor and nothing references it. Path from `--profile-out=`, overridable at run time by `$OPTIFORGE_PROFILE_OUT` |
+| 10 | ✅ `--profile-report=<file>` is a mode of its own, needing no input program; `--use-profile=` and `--hot-threshold=` wired through the driver |
 | 11 | Driver enforces matching `-O` levels between instrumented and PGO builds |
 | 12 | Benchmark harness records full machine specifications; results committed |

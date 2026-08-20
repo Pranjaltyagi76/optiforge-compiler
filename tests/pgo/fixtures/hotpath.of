@@ -1,0 +1,32 @@
+// The benchmark Phase 10's exit criterion asks for: exactly one hot function
+// and exactly one hot loop, with a cold function to prove the other end works.
+//
+// `compute` is called only 20 times but runs 5,000 iterations each time, so it
+// holds essentially all of the execution. That is the case the design sketch's
+// "functions inherit heat from their entry block count" rule gets wrong, and
+// why this compiler weights a function by the work done inside it instead.
+//
+// `rarely` is deliberately two blocks so the inliner leaves it alone: a
+// single-block callee would be inlined at -O2 and then deleted, and a cold
+// function that does not exist proves nothing.
+fn rarely(int n) -> int {
+    if (n > 1000) {
+        return n - 1;
+    }
+    return n + 1;
+}
+
+fn compute(int n) -> int {
+    int total = 0;
+    int i = 0;
+    while (i < n) { total = total + i * 3; i = i + 1; }
+    return total;
+}
+
+fn main() -> int {
+    int acc = 0;
+    int r = 0;
+    while (r < 20) { acc = acc + compute(5000); r = r + 1; }
+    print_int(rarely(acc));
+    return 0;
+}

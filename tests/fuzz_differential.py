@@ -196,6 +196,10 @@ CONFIGS = [
     ("-O2", []),
     ("-O0", ["--regalloc=naive"]),
     ("-O2", ["--regalloc=naive"]),
+    # PROF-11: instrumentation must not change what a program prints. An
+    # instrumented build that disagrees with -O0 has measured something other
+    # than the program.
+    ("-O2", ["--profile"]),
 ]
 
 
@@ -209,7 +213,11 @@ def run(src, workdir, level, idx, extra=()):
     if c.returncode != 0:
         return ("COMPILE_FAIL", c.returncode, (c.stdout + c.stderr)[:800])
     try:
-        p = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10)
+        # cwd is the scratch directory, not the repo: an instrumented build
+        # writes its .prof beside wherever it is run from, and hundreds of them
+        # in the working tree is not a thing a test run should leave behind.
+        p = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10,
+                           cwd=str(workdir))
     except subprocess.TimeoutExpired:
         return ("TIMEOUT", -1, "")
     return ("OK", p.returncode, p.stdout)

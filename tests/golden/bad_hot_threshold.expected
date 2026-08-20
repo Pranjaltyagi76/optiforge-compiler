@@ -1,0 +1,5 @@
+=== exit ===
+2
+=== stdout ===
+=== stderr ===
+optiforge: error: '--hot-threshold=' expects a percentage in (0, 100], got '250'

@@ -1,5 +1,6 @@
 #include "optiforge/driver/Options.h"
 
+#include <cstdlib>
 #include <ostream>
 
 #include "optiforge/support/Version.h"
@@ -144,6 +145,65 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       continue;
     }
 
+    if (arg == "--profile") {
+      out.profile = true;
+      continue;
+    }
+
+    if (arg == "--profile-time") {
+      // Implies --profile: asking for timings without instrumenting is a
+      // request that cannot be honoured, and silently ignoring it is worse.
+      out.profile = true;
+      out.profileTime = true;
+      continue;
+    }
+
+    if (startsWith(arg, "--profile-out=")) {
+      out.profileOut =
+          std::string(arg.substr(std::string_view("--profile-out=").size()));
+      if (out.profileOut.empty()) {
+        err << "optiforge: error: '--profile-out=' requires a path\n";
+        return false;
+      }
+      continue;
+    }
+
+    if (startsWith(arg, "--use-profile=")) {
+      out.useProfile =
+          std::string(arg.substr(std::string_view("--use-profile=").size()));
+      if (out.useProfile.empty()) {
+        err << "optiforge: error: '--use-profile=' requires a path\n";
+        return false;
+      }
+      continue;
+    }
+
+    if (startsWith(arg, "--profile-report=")) {
+      out.profileReport =
+          std::string(arg.substr(std::string_view("--profile-report=").size()));
+      if (out.profileReport.empty()) {
+        err << "optiforge: error: '--profile-report=' requires a path\n";
+        return false;
+      }
+      continue;
+    }
+
+    if (startsWith(arg, "--hot-threshold=")) {
+      const std::string value =
+          std::string(arg.substr(std::string_view("--hot-threshold=").size()));
+      char* end = nullptr;
+      const double percent = std::strtod(value.c_str(), &end);
+      if (value.empty() || end == value.c_str() || *end != '\0' || percent <= 0.0 ||
+          percent > 100.0) {
+        err << "optiforge: error: '--hot-threshold=' expects a percentage in "
+               "(0, 100], got '"
+            << value << "'\n";
+        return false;
+      }
+      out.hotThreshold = percent;
+      continue;
+    }
+
     if (arg == "--print-regalloc") {
       out.printRegAlloc = true;
       continue;
@@ -208,6 +268,14 @@ void printHelp(std::ostream& out) {
          "  -O1                  Basic optimization\n"
          "  -O2                  Full optimization\n"
          "  --regalloc=<kind>    Register allocator: naive or graph (default: graph)\n"
+         "\n"
+         "Profiling:\n"
+         "  --profile            Build an instrumented binary that writes a .prof\n"
+         "  --profile-out=<file> Where that binary writes it (default: <output>.prof)\n"
+         "  --profile-time       Also record per-function wall time\n"
+         "  --use-profile=<file> Compile against a profile collected earlier\n"
+         "  --profile-report=<f> Print a hot-path report for <f> and exit\n"
+         "  --hot-threshold=<%>  Cumulative share that defines hot (default: 80)\n"
          "\n"
          "Diagnostics:\n"
          "  -Werror              Treat warnings as errors\n"

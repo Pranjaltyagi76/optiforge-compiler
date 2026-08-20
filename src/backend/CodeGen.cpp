@@ -677,6 +677,15 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
       // The slot itself is the storage; nothing to emit.
       break;
 
+    case Opcode::ProfInc:
+      // One instruction, no call, no register touched -- which is the whole
+      // reason the counters are a static array rather than a runtime call.
+      emit("incq",
+           {MOperand::makeRipLabel("__ofprof_counters+" +
+                                   std::to_string(instruction.counterIndex() * 8))},
+           "profile counter " + std::to_string(instruction.counterIndex()));
+      break;
+
     case Opcode::Copy: {
       // Produced by SSA destruction. Source and destination frequently share a
       // location -- a slot by coalescing, a register by the allocator having
@@ -832,6 +841,7 @@ void CodeGen::lowerFunction(const ir::Function& function, MFunction& out) {
 MModule CodeGen::run(const ir::Module& module, analysis::AnalysisManager& analyses) {
   MModule result;
   result.sourceName = module.sourceName();
+  result.profile = profile_;
   module_ = &result;
   floatLabels_.clear();
   allocationErrors_.clear();

@@ -114,6 +114,7 @@ add_subdirectory(src/support)   # of_support  — depends on nothing
 add_subdirectory(src/frontend)  # of_frontend — lexer, AST, parser
 add_subdirectory(src/ir)        # of_ir      - value model, CFG, verifier, printers
 add_subdirectory(src/irgen)     # of_irgen   - typed AST -> IR lowering
+add_subdirectory(src/profile)         # of_profile  - .prof reader, model, classifier
 add_subdirectory(src/analysis)        # of_analysis - dominators, loops, dataflow
 add_subdirectory(src/passes)          # of_passes  - pass base, manager, pipelines
 add_subdirectory(src/transforms)      # of_transforms - SSA construction and destruction
@@ -155,3 +156,4 @@ message(STATUS "")
 # ---------------------------------------------------------------------------
 install(TARGETS optiforge RUNTIME DESTINATION bin)
 install(TARGETS ofrt ARCHIVE DESTINATION lib/optiforge)
+install(TARGETS ofprof ARCHIVE DESTINATION lib/optiforge)

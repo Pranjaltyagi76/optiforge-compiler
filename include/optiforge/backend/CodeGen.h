@@ -4,6 +4,7 @@
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "optiforge/backend/MachineIR.h"
@@ -49,6 +50,10 @@ public:
   /// runs on. It is passed even for the naive allocator so the caller does not
   /// have to know which one is in use; nothing is computed if it is not needed.
   MModule run(const ir::Module& module, analysis::AnalysisManager& analyses);
+
+  /// Data the instrumentation pass wants emitted alongside the code. Set before
+  /// `run`; ignored entirely when `enabled` is false.
+  void setProfileLayout(ProfileLayout layout) { profile_ = std::move(layout); }
 
   /// Allocation errors found by `verifyAssignment`, accumulated across the
   /// module. Non-empty means the compiler produced code it cannot vouch for,
@@ -129,6 +134,7 @@ private:
 
   std::vector<std::string> allocationErrors_;
   std::vector<RegisterAssignment> allocations_;
+  ProfileLayout profile_;
 };
 
 /// Renders a machine module as GNU assembler input (AT&T syntax).

@@ -1,0 +1,8 @@
+=== exit ===
+3
+=== stdout ===
+OptiForge Profile Report
+
+This file could not be read as a profile.
+  warning: profile 'tests/pgo/fixtures/nonexistent.prof' cannot be opened
+=== stderr ===

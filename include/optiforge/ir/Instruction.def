@@ -60,3 +60,12 @@ OPCODE(Phi,    "phi",   -1, true,  false)
 
 // --- Produced by SSA destruction in Phase 6 ---
 OPCODE(Copy,   "copy",   1, true,  false)
+
+// --- Produced by the instrumentation pass in Phase 9 ---
+//
+// Increments one slot of the profile counter array. No operands and no result:
+// it reads nothing, produces nothing, and the only thing it carries is the
+// index it bumps. Lowered to a single `incq __ofprof_counters+8n(%rip)`, which
+// is why the roadmap's "no function call in the hot path" is satisfied by
+// construction rather than by care.
+OPCODE(ProfInc, "profinc", 0, false, false)

@@ -1,0 +1,15 @@
+OPTIFORGE_PROFILE 1
+SOURCE corrupt.of
+SRCHASH 0x00000000000000ff
+OPTLEVEL 2
+COMPILER optiforge-0.1.0
+RUNS 1
+TOTAL_SAMPLES 30
+
+WHAT_IS_THIS something 1
+FUNCTION f 10
+BLOCK f entry 10
+BLOCK f loop 20
+BLOCK f garbage notanumber
+BRANCH f loop taken=5 not_taken=5
+LOOP f loop entries=999 iterations=1

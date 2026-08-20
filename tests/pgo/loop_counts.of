@@ -1,0 +1,27 @@
+// The hand-verifiable case Phase 9's exit criterion asks for.
+//
+// sum(4) runs the body four times, so the condition block runs five: four
+// entries plus the final check that fails. Every number below was worked out
+// from the source before the compiler was run, which is the point.
+//
+// LEVEL: -O1
+// EXPECT-OUTPUT: 6
+// EXPECT-PROF: FUNCTION sum 1
+// EXPECT-PROF: FUNCTION main 1
+// EXPECT-PROF: BLOCK sum entry 1
+// EXPECT-PROF: BLOCK sum while.cond.1 5
+// EXPECT-PROF: BLOCK sum while.body.2 4
+// EXPECT-PROF: BLOCK sum while.end.3 1
+// EXPECT-PROF: BRANCH sum while.cond.1 taken=4 not_taken=1
+// EXPECT-PROF: LOOP sum while.cond.1 entries=1 iterations=4
+fn sum(int n) -> int {
+    int total = 0;
+    int i = 0;
+    while (i < n) { total = total + i; i = i + 1; }
+    return total;
+}
+
+fn main() -> int {
+    print_int(sum(4));
+    return 0;
+}

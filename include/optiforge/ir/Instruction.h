@@ -117,6 +117,14 @@ public:
   Instruction* slotAlias() const { return slotAlias_; }
   void setSlotAlias(Instruction* root) { slotAlias_ = root; }
 
+  // --- ProfInc: which counter to bump ---
+  //
+  // Meaningless on every other opcode. Kept as a plain index rather than a
+  // pointer to a counter object because the array it indexes does not exist
+  // until the assembler emits it.
+  std::uint32_t counterIndex() const { return counterIndex_; }
+  void setCounterIndex(std::uint32_t index) { counterIndex_ = index; }
+
   // --- Alloca: the type of the slot, not of the produced address ---
   const Type* allocatedType() const { return allocatedType_; }
   void setAllocatedType(const Type* type) { allocatedType_ = type; }
@@ -130,6 +138,7 @@ private:
   Function* callee_ = nullptr;
   const Type* allocatedType_ = nullptr;
   Instruction* slotAlias_ = nullptr;
+  std::uint32_t counterIndex_ = 0;
 };
 
 }  // namespace optiforge::ir

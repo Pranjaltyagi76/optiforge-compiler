@@ -1,0 +1,2 @@
+--profile-report=tests/pgo/fixtures/hotpath.prof
+--hot-threshold=50

@@ -114,6 +114,110 @@ void printInstruction(const MInstr& instruction, std::ostream& out) {
   out << '\n';
 }
 
+/// Escapes a string for `.asciz`. Paths on this platform contain backslashes,
+/// which the assembler would otherwise read as escape sequences.
+std::string quoted(const std::string& text) {
+  std::string out = "\"";
+  for (char c : text) {
+    if (c == '\\' || c == '"') {
+      out += '\\';
+    }
+    out += c;
+  }
+  out += '"';
+  return out;
+}
+
+/// Emits the profile counter array, the table that interprets it, and the
+/// header fields that let a later build detect a stale profile.
+///
+/// The counters live in `.bss` because they start at zero and there are as many
+/// of them as there are basic blocks; everything else is read-only. Every symbol
+/// here is one `libofprof` declares `extern`, so a rename on either side is a
+/// link error rather than a silent misread.
+void printProfileData(const ProfileLayout& profile, std::ostream& out) {
+  if (!profile.enabled) {
+    return;
+  }
+
+  out << "\n# --- Profile instrumentation (Phase 9) ---\n";
+  out << "\t.bss\n";
+  out << "\t.align\t8\n";
+  out << "\t.globl\t__ofprof_counters\n";
+  out << "__ofprof_counters:\n";
+  out << "\t.zero\t" << (static_cast<std::uint64_t>(profile.counterCount) * 8)
+      << "\t# " << profile.counterCount << " basic blocks\n";
+
+  {
+    // Accumulated ticks, the re-entry depth that stops a recursive function
+    // counting its own nested calls twice, and where the outermost call began.
+    //
+    // Emitted even when timing is off, with one unused slot. PE/COFF has no
+    // usable weak undefined symbol, so the runtime cannot simply declare these
+    // and check whether they resolved -- it would be a link error. Twenty-four
+    // bytes is the price of one arrangement that works in both builds; the
+    // runtime's guard is __ofprof_num_times, which is zero when timing is off.
+    const std::size_t slots =
+        profile.timedFunctions.empty() ? 1 : profile.timedFunctions.size();
+    for (const char* symbol :
+         {"__ofprof_times", "__ofprof_time_depth", "__ofprof_time_start"}) {
+      out << "\t.align\t8\n";
+      out << "\t.globl\t" << symbol << "\n";
+      out << symbol << ":\n";
+      out << "\t.zero\t" << (slots * 8) << "\n";
+    }
+  }
+
+  out << "\n\t.section\t.rdata,\"dr\"\n";
+  out << "\t.align\t8\n";
+  out << "\t.globl\t__ofprof_num_counters\n";
+  out << "__ofprof_num_counters:\t.quad\t" << profile.counterCount << "\n";
+  out << "\t.globl\t__ofprof_num_times\n";
+  out << "__ofprof_num_times:\t.quad\t" << profile.timedFunctions.size() << "\n";
+  out << "\t.globl\t__ofprof_num_records\n";
+  out << "__ofprof_num_records:\t.quad\t" << profile.records.size() << "\n";
+  out << "\t.globl\t__ofprof_src_hash\n";
+  out << "__ofprof_src_hash:\t.quad\t" << hex64(profile.sourceHash) << "\n";
+  out << "\t.globl\t__ofprof_opt_level\n";
+  out << "__ofprof_opt_level:\t.quad\t" << profile.optLevel << "\n";
+
+  out << "\t.globl\t__ofprof_source\n";
+  out << "__ofprof_source:\t.asciz\t" << quoted(profile.sourceName) << "\n";
+  out << "\t.globl\t__ofprof_compiler\n";
+  out << "__ofprof_compiler:\t.asciz\t" << quoted(profile.compiler) << "\n";
+  out << "\t.globl\t__ofprof_default_path\n";
+  out << "__ofprof_default_path:\t.asciz\t" << quoted(profile.defaultOutputPath) << "\n";
+
+  // One record per line the runtime will print: the kind, the one or two
+  // counters it reads, and the offset of the text between keyword and numbers.
+  out << "\n\t.align\t8\n";
+  out << "\t.globl\t__ofprof_records\n";
+  out << "__ofprof_records:\n";
+  for (std::size_t i = 0; i < profile.records.size(); ++i) {
+    const ProfileRecord& record = profile.records[i];
+    out << "\t.quad\t" << static_cast<std::uint64_t>(record.kind) << ", "
+        << record.counterA << ", " << record.counterB << ", .LPN" << i
+        << " - __ofprof_names\t# " << record.name << "\n";
+  }
+
+  out << "\n\t.globl\t__ofprof_names\n";
+  out << "__ofprof_names:\n";
+  for (std::size_t i = 0; i < profile.records.size(); ++i) {
+    out << ".LPN" << i << ":\t.asciz\t" << quoted(profile.records[i].name) << "\n";
+  }
+  if (profile.records.empty()) {
+    out << "\t.byte\t0\n";  // never indexed, but the symbol has to exist
+  }
+
+  // Counter names as comments only. Nothing reads them; they are here so the
+  // array can be checked by hand against the .prof, which is exactly what
+  // Phase 9's exit criterion asks for.
+  out << "\n# counter index -> function:block\n";
+  for (std::size_t i = 0; i < profile.counterNames.size(); ++i) {
+    out << "#   " << i << "\t" << profile.counterNames[i] << "\n";
+  }
+}
+
 }  // namespace
 
 void printAssembly(const MModule& module, std::ostream& out) {
@@ -156,6 +260,8 @@ void printAssembly(const MModule& module, std::ostream& out) {
           << "\n";
     }
   }
+
+  printProfileData(module.profile, out);
 }
 
 }  // namespace optiforge::backend

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "optiforge/support/ProfileLayout.h"
+
 namespace optiforge::backend {
 
 /// x86-64 registers. Only the ones this backend actually touches are named.
@@ -99,6 +101,11 @@ struct MModule {
   std::vector<FloatConstant> floatConstants;
   /// True when any function negates a float, which needs a 16-byte sign mask.
   bool needsNegateMask = false;
+
+  /// Counter array, record table and header fields for an instrumented build.
+  /// `enabled` is false for every ordinary build, and then nothing extra is
+  /// emitted and the profile runtime is not linked.
+  ProfileLayout profile;
 };
 
 }  // namespace optiforge::backend

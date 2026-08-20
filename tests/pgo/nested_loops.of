@@ -1,0 +1,22 @@
+// A loop inside a loop. The outer body runs 3 times; the inner loop is entered
+// 3 times and iterates 3x4 = 12 times in total, so its header runs 12 + 3 = 15.
+//
+// LEVEL: -O1
+// EXPECT-OUTPUT: 12
+// EXPECT-PROF: LOOP nested while.cond.1 entries=1 iterations=3
+// EXPECT-PROF: LOOP nested while.cond.4 entries=3 iterations=12
+fn nested(int rows, int cols) -> int {
+    int count = 0;
+    int r = 0;
+    while (r < rows) {
+        int c = 0;
+        while (c < cols) { count = count + 1; c = c + 1; }
+        r = r + 1;
+    }
+    return count;
+}
+
+fn main() -> int {
+    print_int(nested(3, 4));
+    return 0;
+}

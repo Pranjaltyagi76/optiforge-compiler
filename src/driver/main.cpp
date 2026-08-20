@@ -19,16 +19,20 @@
 #include "optiforge/ir/Verifier.h"
 #include "optiforge/irgen/IRGen.h"
 #include "optiforge/analysis/AnalysisManager.h"
+#include "optiforge/analysis/ProfileAnalysis.h"
 #include "optiforge/analysis/AnalysisPrinter.h"
 #include "optiforge/analysis/SSAVerifier.h"
 #include "optiforge/passes/Pass.h"
+#include "optiforge/transforms/Instrument.h"
 #include "optiforge/transforms/SSA.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/RegAlloc.h"
 #include "optiforge/backend/TargetInfo.h"
 #include "optiforge/driver/Toolchain.h"
 #include "optiforge/support/Diagnostic.h"
+#include "optiforge/profile/Profile.h"
 #include "optiforge/support/SourceManager.h"
+#include "optiforge/support/Version.h"
 
 using namespace optiforge;
 
@@ -56,6 +60,87 @@ void keepPassRegistrations() {
   transforms::anchorInline();
 }
 
+
+/// Loads the profile named by --use-profile and says, out loud, how much of it
+/// applies to this module.
+///
+/// Every path through this returns. A profile that is missing, unreadable,
+/// stale, or self-contradictory produces warnings and an ordinary build --
+/// requirement PGO-11, which is designed in here rather than tested in later:
+/// nothing below can change what the program computes, only what the optimizer
+/// is told about it.
+profile::ProfileData loadAndValidateProfile(const Options& opts, const ir::Module& module,
+                                            DiagnosticEngine& diags) {
+  profile::ProfileLoadOptions loadOptions;
+  loadOptions.hotThresholdPercent = opts.hotThreshold;
+
+  profile::ProfileData data = profile::loadProfile(opts.useProfile, loadOptions);
+
+  for (const std::string& warning : data.warnings()) {
+    diags.reportGlobal(DiagSeverity::Warning, warning);
+  }
+  if (!data.isValid()) {
+    diags.reportGlobal(DiagSeverity::Warning,
+                       "compiling without profile guidance");
+    return data;
+  }
+
+  // Staleness. The hash is the cheap, exact check; the match rate is what says
+  // whether a mismatched hash still leaves something usable (PGO-12).
+  if (!data.matchesSource(module.sourceHash())) {
+    diags.reportGlobal(
+        DiagSeverity::Warning,
+        "profile '" + opts.useProfile + "' was collected from different source "
+        "(profile hash does not match this one); matching by name instead");
+  }
+  if (data.header().optLevel >= 0 && data.header().optLevel != opts.optLevel) {
+    // ADR-05 puts instrumentation after optimization, so block names describe
+    // the optimized CFG. A profile from a different -O level names a different
+    // set of blocks, and the mismatch is worth saying before the match rate
+    // makes it obvious.
+    diags.reportGlobal(DiagSeverity::Warning,
+                       "profile was collected at -O" +
+                           std::to_string(data.header().optLevel) +
+                           " but this build is -O" + std::to_string(opts.optLevel) +
+                           "; block names will not line up");
+  }
+
+  for (const std::string& violation : data.flowViolations()) {
+    diags.reportGlobal(DiagSeverity::Warning,
+                       "profile is internally inconsistent: " + violation +
+                           " (counts used as advisory only)");
+  }
+
+  // Match rate: how much of *this module* the profile actually describes. Run
+  // over the module rather than the profile, so records for blocks that no
+  // longer exist do not flatter the number.
+  std::size_t functions = 0;
+  std::size_t functionsMatched = 0;
+  for (const auto& function : module.functions()) {
+    if (function->isDeclaration()) {
+      continue;
+    }
+    ++functions;
+    if (data.functionCount(function->name()) > 0 ||
+        data.functionHeat(function->name()) != profile::Heat::Unknown) {
+      ++functionsMatched;
+    }
+  }
+
+  const double rate = functions == 0
+                          ? 1.0
+                          : static_cast<double>(functionsMatched) /
+                                static_cast<double>(functions);
+  if (rate < 0.5) {
+    diags.reportGlobal(
+        DiagSeverity::Warning,
+        "profile appears stale: it describes " + std::to_string(functionsMatched) +
+            " of this module's " + std::to_string(functions) +
+            " function(s); profile-guided optimization will do little");
+  }
+
+  return data;
+}
 
 ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticEngine& diags) {
   const std::optional<FileID> file = sources.addFile(opts.inputPath);
@@ -126,6 +211,20 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   // Skipped at -O0, where keeping every local in memory makes the IR map
   // straightforwardly onto the source (ADR-02).
   analysis::AnalysisManager analyses;
+  ProfileLayout profileLayout;
+
+  // --- Profile ingestion (Phase 10) ---
+  //
+  // Loaded before the pipeline runs, so a pass can ask for it. Nothing consumes
+  // it yet; Phase 11 is what turns these numbers into decisions.
+  if (!opts.useProfile.empty()) {
+    auto data = std::make_shared<profile::ProfileData>(
+        loadAndValidateProfile(opts, *module, diags));
+    for (const auto& function : module->functions()) {
+      analyses.provide<analysis::ProfileAnalysis>(*function, data);
+    }
+  }
+
   if (opts.optLevel > 0) {
     transforms::promoteMemoryToRegisters(*module, analyses);
 
@@ -196,11 +295,42 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   // holds -- and the register allocator is about to ask for liveness.
   analyses.invalidateAll();
 
+  // --- Where the output goes ---
+  //
+  // Computed before code generation rather than after, because an instrumented
+  // binary has to be told at compile time where to write its profile.
+  const std::filesystem::path inputPath(opts.inputPath);
+  const std::string stem = inputPath.stem().string();
+  const std::filesystem::path outputPath =
+      opts.outputPath.empty() ? std::filesystem::path(stem + ".exe")
+                              : std::filesystem::path(opts.outputPath);
+
+  // --- Instrumentation (ADR-05: late, so the measured CFG is the optimized
+  // --- one the profile-guided build will also see) ---
+  if (opts.profile) {
+    const std::string profileOut =
+        opts.profileOut.empty() ? outputPath.stem().string() + ".prof" : opts.profileOut;
+
+    profileLayout = transforms::instrumentForProfiling(
+        *module, analyses, opts.optLevel,
+        std::string("optiforge-") + OPTIFORGE_VERSION_STRING, profileOut,
+        opts.profileTime);
+
+    if (!verifier.verify(*module)) {
+      diags.reportGlobal(DiagSeverity::Error,
+                         "internal compiler error: IR invalid after instrumentation");
+      verifier.printErrors(std::cerr);
+      return ExitCode::InternalError;
+    }
+    analyses.invalidateAll();
+  }
+
   // --- Code generation ---
   const backend::RegAllocKind allocator = opts.regalloc == RegAllocChoice::Naive
                                               ? backend::RegAllocKind::Naive
                                               : backend::RegAllocKind::Graph;
   backend::CodeGen codegen(backend::x86_64WindowsTarget(), allocator);
+  codegen.setProfileLayout(std::move(profileLayout));
   const backend::MModule machine = codegen.run(*module, analyses);
 
   if (opts.printRegAlloc) {
@@ -227,12 +357,7 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   }
 
   // --- Assemble and link ---
-  const std::filesystem::path inputPath(opts.inputPath);
-  const std::string stem = inputPath.stem().string();
-  std::filesystem::path outputPath =
-      opts.outputPath.empty() ? std::filesystem::path(stem + ".exe")
-                              : std::filesystem::path(opts.outputPath);
-
+  //
   // Intermediates are named after the *output*, not the input: two inputs
   // compiled to different outputs in one directory would otherwise write to
   // the same .s and .o.
@@ -279,7 +404,16 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     return ExitCode::EnvironmentError;
   }
 
-  if (!toolchain.link(objectPath.string(), outputPath.string())) {
+  if (opts.profile && !toolchain.hasProfileRuntime()) {
+    diags.reportGlobal(DiagSeverity::Error,
+                       "cannot locate libofprof.a in " + toolchain.runtimeDir() +
+                           "\n  --profile needs the profile runtime, which is built "
+                           "alongside libofrt.a");
+    cleanup(false);
+    return ExitCode::EnvironmentError;
+  }
+
+  if (!toolchain.link(objectPath.string(), outputPath.string(), opts.profile)) {
     cleanup(false);
     return ExitCode::EnvironmentError;
   }
@@ -309,6 +443,17 @@ int main(int argc, char** argv) {
   if (opts.showVersion) {
     printVersion(std::cout);
     return toInt(ExitCode::Success);
+  }
+
+  // --profile-report is a mode of its own: it reads a .prof and nothing else,
+  // so it needs no input program and runs before the check for one.
+  if (!opts.profileReport.empty()) {
+    profile::ProfileLoadOptions loadOptions;
+    loadOptions.hotThresholdPercent = opts.hotThreshold;
+    const profile::ProfileData data =
+        profile::loadProfile(opts.profileReport, loadOptions);
+    profile::printProfileReport(data, std::cout);
+    return toInt(data.isValid() ? ExitCode::Success : ExitCode::EnvironmentError);
   }
 
   if (opts.inputPath.empty()) {

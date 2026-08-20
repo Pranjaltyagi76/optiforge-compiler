@@ -80,6 +80,12 @@ void printInstruction(const Instruction& instruction, std::ostream& out) {
       out << " " << instruction.allocatedType()->name();
       break;
 
+    case Opcode::ProfInc:
+      // The index is the whole content of the instruction, so --emit=ir is
+      // useless for debugging instrumentation without it.
+      out << " #" << instruction.counterIndex();
+      break;
+
     case Opcode::Load:
       out << " " << instruction.type()->name() << ", " << operandText(instruction.operand(0));
       break;

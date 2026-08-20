@@ -61,6 +61,18 @@ public:
                               : static_cast<const typename A::Result*>(it->second.get());
   }
 
+  /// Installs a result the manager did not compute.
+  ///
+  /// For analyses whose answer comes from outside the compiler -- the profile
+  /// loaded from a `.prof` -- there is nothing to run. Handing the result in
+  /// means passes reach it the same way they reach any other analysis, and the
+  /// distinction between "not supplied" and "supplied but empty" survives:
+  /// `getCached` returns null for the first and a valid pointer for the second.
+  template <class A>
+  void provide(const ir::Function& function, std::shared_ptr<typename A::Result> result) {
+    cache_[Key{std::type_index(typeid(A)), &function}] = std::move(result);
+  }
+
   /// Drops every result for one function. Called after a pass reports that it
   /// changed the IR.
   void invalidate(const ir::Function& function) {

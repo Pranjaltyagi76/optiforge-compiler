@@ -31,7 +31,18 @@ public:
   bool assemble(const std::string& asmPath, const std::string& objectPath) const;
 
   /// Links `objectPath` plus the runtime into `outputPath`.
-  bool link(const std::string& objectPath, const std::string& outputPath) const;
+  ///
+  /// `withProfileRuntime` additionally links libofprof, which is only correct
+  /// for an instrumented object: the profile runtime references counter symbols
+  /// that only instrumentation emits, so linking it always would break every
+  /// ordinary program.
+  bool link(const std::string& objectPath, const std::string& outputPath,
+            bool withProfileRuntime = false) const;
+
+  /// Whether libofprof.a sits next to libofrt.a. Checked before an instrumented
+  /// link so a missing profile runtime is named rather than surfacing as a pile
+  /// of undefined symbols.
+  bool hasProfileRuntime() const;
 
   /// Records the directory containing the running executable, used to locate
   /// the runtime. Call once from main with argv[0].

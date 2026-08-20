@@ -1,0 +1,27 @@
+// Per-function wall time (PROF-06), which is opt-in because unlike a counter
+// increment it is a real call. Recursion is the case that has to be right: fib
+// calls itself, and a naive enter/exit pair would charge every nested call
+// again. The runtime only starts the clock at depth zero.
+//
+// The time itself is not asserted -- it is a measurement, and asserting on one
+// would make this test fail on a fast machine. What is asserted is that a TIME
+// record exists for each function and that the counts are still exact.
+//
+// LEVEL: -O1
+// FLAGS: --profile-time
+// EXPECT-OUTPUT: 8
+// fib(6) makes 25 calls: C(n) = 1 + C(n-1) + C(n-2), C(0) = C(1) = 1. Of those,
+// 13 hit the base case -- which is fib(7) -- and 12 recurse.
+// EXPECT-PROF: FUNCTION fib 25
+// EXPECT-PROF: FUNCTION main 1
+// EXPECT-PROF: BLOCK fib if.then.1 13
+// EXPECT-PROF: BLOCK fib if.end.2 12
+fn fib(int n) -> int {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() -> int {
+    print_int(fib(6));
+    return 0;
+}

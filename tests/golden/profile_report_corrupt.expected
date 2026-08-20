@@ -1,0 +1,26 @@
+=== exit ===
+0
+=== stdout ===
+OptiForge Profile Report - corrupt.of
+Format version 1, built at -O2 by optiforge-0.1.0
+Source hash 0x00000000000000ff, 1 run(s), 30 samples
+  warning: profile 'tests/pgo/fixtures/corrupt.prof' contains record type 'WHAT_IS_THIS', which this compiler does not know; ignoring it
+  warning: profile 'tests/pgo/fixtures/corrupt.prof' line 13: BLOCK expects '<function> <block> <count>' (ignored; further occurrences of this are not reported)
+
+WARM FUNCTIONS
+  f                       calls =           10    100.00% of executions   [WARM]
+
+LOOPS
+  f:loop                      entries =          999   iterations =              1
+                              avg trip count = 0.0   [WARM]
+
+SUMMARY
+  0 hot, 2 warm, 0 cold block(s) (0 never executed)
+  hot threshold: 80.0% cumulative, floor 1,000 executions
+  nothing qualified as hot: no block ran at least 1,000 times, so this workload is too small to guide optimization
+
+FLOW CONSERVATION
+  These records contradict each other, so the counts are advisory:
+    branch 'f loop': taken + not_taken = 10 but the block ran 20 times
+    loop 'f loop': entries + iterations = 1000 but the header ran 20 times
+=== stderr ===
