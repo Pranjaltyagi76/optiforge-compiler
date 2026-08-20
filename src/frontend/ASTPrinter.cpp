@@ -97,6 +97,10 @@ private:
         const auto* decl = static_cast<const VarDeclStmt*>(stmt);
         std::ostringstream text;
         text << "VarDeclStmt '" << decl->name() << "' : " << toString(decl->declaredType());
+        if (decl->isArray()) {
+          // Only for arrays, so every existing --emit=ast dump is unchanged.
+          text << "[" << decl->arrayLength() << "]";
+        }
         line(text.str());
         if (decl->init() != nullptr) {
           ++depth_;
@@ -108,8 +112,12 @@ private:
 
       case Node::Kind::AssignStmt: {
         const auto* assign = static_cast<const AssignStmt*>(stmt);
-        line("AssignStmt '" + assign->name() + "'");
+        line("AssignStmt '" + assign->name() + "'" +
+             (assign->isIndexed() ? " [indexed]" : ""));
         ++depth_;
+        if (assign->isIndexed()) {
+          writeExpr(assign->index());
+        }
         writeExpr(assign->value());
         --depth_;
         break;
@@ -199,6 +207,15 @@ private:
       case Node::Kind::VarRefExpr: {
         const auto* ref = static_cast<const VarRefExpr*>(expr);
         line("VarRef '" + ref->name() + "'" + suffix);
+        break;
+      }
+
+      case Node::Kind::IndexExpr: {
+        const auto* index = static_cast<const IndexExpr*>(expr);
+        line("Index '" + index->name() + "'" + suffix);
+        ++depth_;
+        writeExpr(index->index());
+        --depth_;
         break;
       }
 

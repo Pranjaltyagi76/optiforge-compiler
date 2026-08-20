@@ -1,5 +1,9 @@
 #include "optiforge/frontend/Type.h"
 
+#include <map>
+#include <string>
+#include <utility>
+
 #include "optiforge/frontend/AST.h"
 
 namespace optiforge {
@@ -14,6 +18,18 @@ std::string_view Type::name() const {
       return "bool";
     case Kind::Void:
       return "void";
+    case Kind::Array:
+      break;
+  }
+  if (kind_ == Kind::Array) {
+    // Built once per interned type and handed out by reference, so the
+    // string_view this returns outlives every caller.
+    static std::map<std::pair<const Type*, unsigned>, std::string> kNames;
+    auto& text = kNames[{element_, length_}];
+    if (text.empty()) {
+      text = std::string(element_->name()) + "[" + std::to_string(length_) + "]";
+    }
+    return text;
   }
   return "<unknown>";
 }
@@ -28,6 +44,10 @@ unsigned Type::sizeInBytes() const {
       return 1;
     case Kind::Void:
       return 0;
+    case Kind::Array:
+      // Eight per element: the slot size, not the element's natural size. See
+      // the header for why bools are not packed.
+      return 8u * length_;
   }
   return 0;
 }
@@ -49,8 +69,24 @@ const Type* Type::get(Kind kind) {
       return &kBool;
     case Kind::Void:
       return &kVoid;
+    case Kind::Array:
+      // An array type carries an element and a length, so it cannot come from
+      // a bare kind. getArray is the only way to make one.
+      return &kVoid;
   }
   return &kVoid;
+}
+
+const Type* Type::getArray(const Type* element, unsigned length) {
+  // Interned, so `int[10]` is one pointer no matter how many declarations
+  // mention it and type identity stays a pointer comparison.
+  static std::map<std::pair<const Type*, unsigned>, Type> kArrays;
+  const auto key = std::make_pair(element, length);
+  const auto it = kArrays.find(key);
+  if (it != kArrays.end()) {
+    return &it->second;
+  }
+  return &kArrays.emplace(key, Type(element, length)).first->second;
 }
 
 const Type* typeFromSpec(TypeSpec spec) {

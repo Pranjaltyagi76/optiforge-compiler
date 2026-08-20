@@ -125,9 +125,21 @@ public:
   std::uint32_t counterIndex() const { return counterIndex_; }
   void setCounterIndex(std::uint32_t index) { counterIndex_ = index; }
 
-  // --- Alloca: the type of the slot, not of the produced address ---
+  // --- Alloca and Gep: the type pointed *at*, not the pointer's own type ---
+  //
+  // For `alloca` it is the type of the slot; for `gep` it is the type of the
+  // element being addressed. One field serves both because both answer the
+  // same question -- what does this pointer point at -- and keeping them
+  // together means the printer and verifier need one rule rather than two.
   const Type* allocatedType() const { return allocatedType_; }
   void setAllocatedType(const Type* type) { allocatedType_ = type; }
+
+  // --- Alloca: how many consecutive elements the slot holds ---
+  //
+  // 1 for every scalar, which is what keeps arrays from changing anything
+  // about an ordinary local. Greater than 1 only for an array declaration.
+  std::uint32_t allocatedCount() const { return allocatedCount_; }
+  void setAllocatedCount(std::uint32_t count) { allocatedCount_ = count; }
 
 private:
   Opcode opcode_;
@@ -139,6 +151,7 @@ private:
   const Type* allocatedType_ = nullptr;
   Instruction* slotAlias_ = nullptr;
   std::uint32_t counterIndex_ = 0;
+  std::uint32_t allocatedCount_ = 1;
 };
 
 }  // namespace optiforge::ir

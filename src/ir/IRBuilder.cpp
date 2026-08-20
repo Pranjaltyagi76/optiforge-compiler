@@ -103,9 +103,11 @@ Value* IRBuilder::createSIToFP(Value* operand) {
 }
 
 Instruction* IRBuilder::createEntryAlloca(const Type* allocatedType,
-                                          const std::string& name) {
+                                          const std::string& name,
+                                          std::uint32_t count) {
   auto instruction = std::make_unique<Instruction>(Opcode::Alloca, Type::getPtr());
   instruction->setAllocatedType(allocatedType);
+  instruction->setAllocatedCount(count);
   instruction->setName(name + ".addr");
 
   // Both null checks are real, not defensive noise: -O3 inlines far enough to
@@ -123,6 +125,14 @@ Instruction* IRBuilder::createEntryAlloca(const Type* allocatedType,
   // The entry block is already terminated once the first statement branches
   // away, so appending would put the alloca after its terminator.
   return entry->insertBeforeTerminator(std::move(instruction));
+}
+
+Value* IRBuilder::createGep(Value* base, Value* index, const Type* elementType) {
+  auto instruction = std::make_unique<Instruction>(Opcode::Gep, Type::getPtr());
+  instruction->setAllocatedType(elementType);
+  instruction->addOperand(base);
+  instruction->addOperand(index);
+  return insert(std::move(instruction), /*named=*/true);
 }
 
 Value* IRBuilder::createLoad(Value* address, const Type* resultType) {

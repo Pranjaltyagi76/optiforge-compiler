@@ -42,9 +42,26 @@ OPCODE(FCmp,   "fcmp",   2, true,  false)
 OPCODE(SIToFP, "sitofp", 1, true,  false)
 
 // --- Memory ---
+//
+// `alloca` reserves `allocatedCount()` consecutive elements of
+// `allocatedType()`. The count is 1 for every scalar, so an ordinary local is
+// unchanged by arrays existing.
 OPCODE(Alloca, "alloca", 0, true,  false)
 OPCODE(Load,   "load",   1, true,  false)
 OPCODE(Store,  "store",  2, false, false)
+
+// --- Array indexing (Phase 13) ---
+//
+// `gep <base>, <index>` -- the address of element `index` of the array `base`
+// points at. Operands are a pointer and an i64; the result is a pointer.
+//
+// Address arithmetic is one instruction rather than an open-coded
+// multiply-and-add so that the IR still says *what is being computed* rather
+// than how. GVN then commons two indexings of the same element for free, which
+// open-coded arithmetic would also get -- but the verifier could not have
+// checked that the pointer arithmetic was well-typed, and a bounds check has
+// nowhere to attach.
+OPCODE(Gep,    "gep",    2, true,  false)
 
 // --- Control flow ---
 OPCODE(Br,     "br",     0, false, true)

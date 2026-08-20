@@ -1,0 +1,20 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/array_errors.of:5:9: error: the array 'a' cannot be used as a value; index it instead
+    s = a;              // an array name is not a value
+        ^
+tests/golden/inputs/array_errors.of:6:5: error: cannot assign to the array 'a' as a whole; assign to one of its elements
+    a = 5;              // no whole-array assignment
+    ^
+tests/golden/inputs/array_errors.of:7:9: error: 's' is not an array, so it cannot be indexed
+    s = s[0];           // indexing a scalar
+        ^
+tests/golden/inputs/array_errors.of:8:7: error: an array index must be of type 'int', not 'bool'
+    a[true] = 1;        // a non-int index
+      ^~~~
+tests/golden/inputs/array_errors.of:9:16: error: an array declaration cannot have an initializer; assign to its elements instead
+    int c[2] = 7;       // no initializer syntax for an aggregate
+               ^
+5 errors generated.

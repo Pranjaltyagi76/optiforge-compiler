@@ -245,11 +245,26 @@ void Sema::analyzeVarDecl(VarDeclStmt& decl) {
     error(decl.range(), "variable " + quoted(decl.name()) + " cannot have type 'void'");
   }
 
+  if (decl.isArray()) {
+    if (declaredType->isVoid()) {
+      // Already reported above; do not build an array of void on top of it.
+      return;
+    }
+    if (decl.init() != nullptr) {
+      // No initializer syntax exists for an aggregate, so `int a[3] = 0;`
+      // would have to mean something invented here. Rejected instead.
+      error(decl.init()->range(),
+            "an array declaration cannot have an initializer; assign to its "
+            "elements instead");
+    }
+    declaredType = Type::getArray(declaredType, decl.arrayLength());
+  }
+
   // The initializer is analyzed *before* the name is declared, so
   // `int x = x;` reports "undeclared variable" rather than silently
   // self-referencing.
   const Type* initType = nullptr;
-  if (Expr* init = decl.init()) {
+  if (Expr* init = decl.init(); init != nullptr && !decl.isArray()) {
     initType = analyzeExpr(*init);
     if (initType != nullptr && !isAssignable(declaredType, initType)) {
       error(init->range(), "cannot initialize a variable of type " +
@@ -301,12 +316,68 @@ void Sema::analyzeAssign(AssignStmt& assign) {
 
   assign.setSymbol(target);
 
-  if (valueType != nullptr && !isAssignable(target->type, valueType)) {
-    error(assign.value()->range(), "cannot assign a value of type " +
-                                       quoted(valueType->name()) + " to variable " +
-                                       quoted(assign.name()) + " of type " +
-                                       quoted(typeName(target->type)));
+  // The type being assigned *to*: the element type for `a[i] = v`, the
+  // variable's own type otherwise.
+  const Type* targetType = target->type;
+
+  if (assign.isIndexed()) {
+    if (Expr* index = assign.index()) {
+      const Type* indexType = analyzeExpr(*index);
+      if (indexType != nullptr && !indexType->isInt()) {
+        error(index->range(), "an array index must be of type 'int', not " +
+                                  quoted(indexType->name()));
+      }
+    }
+    if (targetType == nullptr || !targetType->isArray()) {
+      error(assign.nameRange(), quoted(assign.name()) + " is not an array, so it "
+                                "cannot be indexed");
+      return;
+    }
+    targetType = targetType->elementType();
+  } else if (targetType != nullptr && targetType->isArray()) {
+    // Assigning a whole array would need aggregate copy semantics the backend
+    // does not have. Say which operation is missing rather than "type error".
+    error(assign.nameRange(), "cannot assign to the array " + quoted(assign.name()) +
+                                  " as a whole; assign to one of its elements");
+    return;
   }
+
+  if (valueType != nullptr && !isAssignable(targetType, valueType)) {
+    error(assign.value()->range(), "cannot assign a value of type " +
+                                       quoted(valueType->name()) + " to " +
+                                       (assign.isIndexed()
+                                            ? "an element of " + quoted(assign.name())
+                                            : "variable " + quoted(assign.name())) +
+                                       " of type " + quoted(typeName(targetType)));
+  }
+}
+
+const Type* Sema::analyzeIndex(IndexExpr& expr) {
+  if (Expr* index = expr.index()) {
+    const Type* indexType = analyzeExpr(*index);
+    if (indexType != nullptr && !indexType->isInt()) {
+      error(index->range(), "an array index must be of type 'int', not " +
+                                quoted(indexType->name()));
+    }
+  }
+
+  Symbol* symbol = symbols_.lookup(expr.name());
+  if (symbol == nullptr) {
+    error(expr.nameRange(), "use of undeclared variable " + quoted(expr.name()));
+    return nullptr;
+  }
+  if (symbol->isFunction()) {
+    error(expr.nameRange(), "cannot index the function " + quoted(expr.name()));
+    return nullptr;
+  }
+  if (symbol->type == nullptr || !symbol->type->isArray()) {
+    error(expr.nameRange(), quoted(expr.name()) + " is not an array, so it cannot "
+                            "be indexed");
+    return nullptr;
+  }
+
+  expr.setSymbol(symbol);
+  return symbol->type->elementType();
 }
 
 void Sema::analyzeIf(IfStmt& stmt) {
@@ -394,6 +465,9 @@ const Type* Sema::analyzeExpr(Expr& expr) {
     case Node::Kind::VarRefExpr:
       type = analyzeVarRef(static_cast<VarRefExpr&>(expr));
       break;
+    case Node::Kind::IndexExpr:
+      type = analyzeIndex(static_cast<IndexExpr&>(expr));
+      break;
     case Node::Kind::UnaryExpr:
       type = analyzeUnary(static_cast<UnaryExpr&>(expr));
       break;
@@ -420,6 +494,14 @@ const Type* Sema::analyzeVarRef(VarRefExpr& expr) {
   if (symbol->isFunction()) {
     error(expr.range(), "function " + quoted(expr.name()) +
                             " cannot be used as a value; did you mean to call it?");
+    return nullptr;
+  }
+  if (symbol->type != nullptr && symbol->type->isArray()) {
+    // An array name has no value: there are no pointers to decay to, so the
+    // only thing it can appear in is an index expression, which never reaches
+    // here. Passing or returning one is caught by the same rule.
+    error(expr.range(), "the array " + quoted(expr.name()) +
+                            " cannot be used as a value; index it instead");
     return nullptr;
   }
   expr.setSymbol(symbol);

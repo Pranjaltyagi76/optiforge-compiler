@@ -67,7 +67,7 @@ This document defines **what OptiForge must do**, **what must be delivered**, an
 | LANG-02 | Support `float` (64-bit IEEE-754 double) | M |
 | LANG-03 | Support `bool` (true/false, 1 byte in memory, register-width in registers) | M |
 | LANG-04 | Support `void` as a function return type only | M |
-| LANG-05 | Arrays (fixed size, single dimension) | C |
+| LANG-05 | Arrays (fixed size, single dimension) — **delivered in Phase 13**, local only, no bounds checking; see `docs/language.md` §9 | C |
 | LANG-06 | Strings, structs, pointers | W |
 
 > **Decision to record:** `int` is 64-bit. The spec's example assembly (`mov eax, edi`) implies 32-bit. Pick one and be consistent throughout the backend; the design docs assume **64-bit `int`** with 32-bit forms used only where provably safe.

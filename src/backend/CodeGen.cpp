@@ -228,7 +228,14 @@ void CodeGen::assignSlots(const ir::Function& function) {
         continue;
       }
       if (instruction->opcode() == Opcode::Alloca || instruction->hasResult()) {
-        offset += 8;
+        // An array alloca reserves one eight-byte slot per element. The offset
+        // grows by the whole block first, so the recorded address is the
+        // *lowest* one -- element 0 -- and element i sits at base + 8i, which
+        // is the direction `gep` adds in.
+        offset += 8 * static_cast<std::int32_t>(
+                          instruction->opcode() == Opcode::Alloca
+                              ? instruction->allocatedCount()
+                              : 1u);
         slots_[instruction.get()] = -offset;
       }
     }
@@ -282,10 +289,37 @@ void CodeGen::emitPrologue(const ir::Function& function) {
   }
 
   if (function_->frameSize > 0) {
-    emit("subq",
-         {MOperand::makeImm(function_->frameSize), MOperand::makeReg(MReg::RSP, true)},
-         "frame: " + std::to_string(localBytes_) + " local + " +
-             std::to_string(outgoingBytes_) + " outgoing");
+    const std::string frameComment = "frame: " + std::to_string(localBytes_) +
+                                     " local + " + std::to_string(outgoingBytes_) +
+                                     " outgoing";
+
+    // **A frame larger than one page has to be probed before it is used.**
+    //
+    // Windows grows the stack by trapping a write to a single guard page that
+    // sits just below the committed region. Moving rsp past that page in one
+    // subtraction and then writing beyond it never touches the guard, so the
+    // write lands on unmapped memory and the process dies -- and it dies at the
+    // first array access, nowhere near the prologue that caused it.
+    //
+    // `___chkstk_ms` walks down a page at a time touching each one, so the
+    // guard moves the way the operating system expects. It takes the size in
+    // rax, leaves rsp alone, and the subtraction below is still ours to do.
+    // Nothing is live in the prologue, so rax is free.
+    //
+    // This is not an arrays feature, it is a bug arrays exposed: before them no
+    // function in this language could reach a 4 KB frame, so the missing probe
+    // had never been reachable.
+    if (function_->frameSize > kStackProbeThreshold) {
+      emit("movq", {MOperand::makeImm(function_->frameSize),
+                    MOperand::makeReg(MReg::RAX, true)},
+           frameComment + " -- probed");
+      emit("call", {MOperand::makeLabel("___chkstk_ms")});
+      emit("subq", {MOperand::makeReg(MReg::RAX), MOperand::makeReg(MReg::RSP, true)});
+    } else {
+      emit("subq",
+           {MOperand::makeImm(function_->frameSize), MOperand::makeReg(MReg::RSP, true)},
+           frameComment);
+    }
   }
 
   // After the frame is reserved, never before: Windows x64 has no red zone, so
@@ -704,6 +738,38 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
     case Opcode::Alloca:
       // The slot itself is the storage; nothing to emit.
       break;
+
+    case Opcode::Gep: {
+      // base + index * 8. Every element is one frame slot wide, including
+      // bool, which is why the scale is a constant here rather than derived
+      // from the element type -- see Type::sizeInBytes in the frontend for why
+      // the frame does not pack.
+      //
+      // `destinationFor` never returns rax: it is not in the allocatable pool,
+      // so the scaled index below cannot collide with the address being built.
+      const MReg destination = destinationFor(instruction, target_.scratchInt1());
+
+      // **The index is read before the destination is written.** The allocator
+      // is free to give this gep the very register its index arrives in, and
+      // materializing the base first would then destroy the index before it is
+      // scaled -- which is a miscompile that only appears at whichever
+      // optimization level happens to allocate that way.
+      const MReg scaled = target_.scratchInt0();
+      loadInt(instruction.operand(1), scaled);
+      emit("shlq", {MOperand::makeImm(3), MOperand::makeReg(scaled, true)}, "* 8");
+
+      std::int32_t offset = 0;
+      if (directSlot(instruction.operand(0), offset)) {
+        emit("leaq", {MOperand::makeMem(MReg::RBP, offset),
+                      MOperand::makeReg(destination, true)},
+             "&" + instruction.operand(0)->name() + "[0]");
+      } else {
+        loadInt(instruction.operand(0), destination);
+      }
+      emit("addq", {MOperand::makeReg(scaled), MOperand::makeReg(destination, true)});
+      storeResult(instruction, destination);
+      break;
+    }
 
     case Opcode::ProfInc:
       // One instruction, no call, no register touched -- which is the whole

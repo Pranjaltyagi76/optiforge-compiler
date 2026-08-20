@@ -1,0 +1,42 @@
+=== exit ===
+0
+=== stdout ===
+module "tests/golden/inputs/arrays.of" hash=0x86058911beba2e0d
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @main() -> i64 {
+entry:
+  %a.addr = alloca i64 x 4
+  %i.addr = alloca i64
+  store i64 0, %i.addr
+  br while.cond.1
+
+while.cond.1:                                   ; preds = entry, while.body.2
+  %t0 = load i64, %i.addr
+  %t1 = icmp lt i64 %t0, 4
+  condbr %t1, while.body.2, while.end.3
+
+while.body.2:                                   ; preds = while.cond.1
+  %t2 = load i64, %i.addr
+  %t3 = load i64, %i.addr
+  %t4 = mul i64 %t2, %t3
+  %t5 = load i64, %i.addr
+  %t6 = gep i64, %a.addr, i64 %t5
+  store i64 %t4, %t6
+  %t7 = load i64, %i.addr
+  %t8 = add i64 %t7, 1
+  store i64 %t8, %i.addr
+  br while.cond.1
+
+while.end.3:                                    ; preds = while.cond.1
+  %t9 = gep i64, %a.addr, i64 3
+  %t10 = load i64, %t9
+  call void @print_int(i64 %t10)
+  ret i64 0
+}
+=== stderr ===

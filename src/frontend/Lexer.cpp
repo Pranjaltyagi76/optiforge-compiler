@@ -301,6 +301,10 @@ Token Lexer::scanToken() {
       return make(TokenKind::LBrace, start, startOffset);
     case '}':
       return make(TokenKind::RBrace, start, startOffset);
+    case '[':
+      return make(TokenKind::LBracket, start, startOffset);
+    case ']':
+      return make(TokenKind::RBracket, start, startOffset);
     case ',':
       return make(TokenKind::Comma, start, startOffset);
     case ';':

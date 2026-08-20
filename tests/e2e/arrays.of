@@ -1,0 +1,171 @@
+// Arrays: the shapes that have to work before any benchmark can use them.
+//
+// Every value printed here is fixed by the arithmetic, not by how the compiler
+// chose to allocate registers or lay out the frame. That is the point: the
+// answers do not depend on the code generation, so they test it at every
+// optimization level and under both allocators.
+//
+// EXPECT-OUTPUT: 30
+// EXPECT-OUTPUT: 8
+// EXPECT-OUTPUT: 4
+// EXPECT-OUTPUT: 135
+// EXPECT-OUTPUT: 5
+// EXPECT-OUTPUT: 15
+// EXPECT-OUTPUT: true
+// EXPECT-OUTPUT: 36
+// EXPECT-OUTPUT: 2016
+
+// Sum of squares, written then read back in a second pass.
+fn squares() -> int {
+    int a[5];
+    int i = 0;
+    while (i < 5) {
+        a[i] = i * i;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 5) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// A computed index, and an element read in the same expression that writes
+// another -- the case where the address arithmetic for two geps is live at
+// once.
+fn computed() -> int {
+    int a[8];
+    int i = 0;
+    while (i < 8) {
+        a[i] = i + 1;
+        i = i + 1;
+    }
+    a[2 + 3] = a[7 - 4] * 2;
+    return a[5];
+}
+
+// Indexing by the value stored in another element: the index is not a loop
+// variable and nothing static can predict it.
+fn indirect() -> int {
+    int a[6];
+    a[0] = 3;
+    a[1] = 5;
+    a[2] = 4;
+    a[3] = 1;
+    a[4] = 2;
+    a[5] = 0;
+    return a[a[0]] + a[a[5]];
+}
+
+// Two arrays live at once, so their frame blocks must not overlap. Fills the
+// second from the first and returns the sum, which is wrong by a wide margin
+// if the two share a byte.
+fn twoArrays() -> int {
+    int src[10];
+    int dst[10];
+    int i = 0;
+    while (i < 10) {
+        src[i] = i;
+        i = i + 1;
+    }
+    i = 0;
+    while (i < 10) {
+        dst[i] = src[i] * 3;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 10) {
+        total = total + dst[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// An array read inside a call argument, and an array written from a call's
+// result: the address has to survive the calling convention.
+fn triple(int x) -> int { return x * 3; }
+
+fn acrossCalls() -> int {
+    int a[4];
+    a[0] = 1;
+    a[1] = triple(a[0]);
+    a[2] = triple(a[1]);
+    a[3] = a[2] - a[1] - a[0];
+    return a[3];
+}
+
+// Floats, which live in a different register class and store with movsd.
+fn floats() -> float {
+    float f[4];
+    int i = 0;
+    while (i < 4) {
+        f[i] = i * 2.5;
+        i = i + 1;
+    }
+    return f[0] + f[1] + f[2] + f[3];
+}
+
+// Bools, which occupy a whole slot each despite being one byte.
+fn bools() -> bool {
+    bool b[3];
+    b[0] = true;
+    b[1] = false;
+    b[2] = b[0] && !b[1];
+    return b[2];
+}
+
+// A two-dimensional array addressed by hand, which is what a matrix kernel has
+// to do while the language has no arrays of arrays.
+fn matrix(int n) -> int {
+    int m[9];
+    int r = 0;
+    while (r < n) {
+        int c = 0;
+        while (c < n) {
+            m[r * n + c] = r * n + c;
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    int total = 0;
+    int k = 0;
+    while (k < n * n) {
+        total = total + m[k];
+        k = k + 1;
+    }
+    return total;
+}
+
+// The last element of a large array, so a frame offset past one byte of
+// displacement is exercised.
+fn large() -> int {
+    int a[64];
+    int i = 0;
+    while (i < 64) {
+        a[i] = i;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 64) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    print_int(squares());
+    print_int(computed());
+    print_int(indirect());
+    print_int(twoArrays());
+    print_int(acrossCalls());
+    print_float(floats());
+    print_bool(bools());
+    print_int(matrix(3));
+    print_int(large());
+    return 0;
+}

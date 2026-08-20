@@ -62,6 +62,7 @@ public:
     UnaryExpr,
     CallExpr,
     VarRefExpr,
+    IndexExpr,
     IntLiteralExpr,
     FloatLiteralExpr,
     BoolLiteralExpr,
@@ -151,6 +152,37 @@ private:
   Symbol* symbol_ = nullptr;
 };
 
+/// `a[i]` -- reading one element of an array (Phase 13).
+///
+/// The base is a *name* rather than an arbitrary expression, mirroring
+/// `VarRefExpr` and `AssignStmt`. That is not a simplification to be undone
+/// later: the language has no pointers and no arrays of arrays, so `a[i]` is
+/// the only indexing form that can exist, and accepting an expression base
+/// would mean sema had to reject most of what the parser produced.
+class IndexExpr final : public Expr {
+public:
+  IndexExpr(std::string name, SourceRange nameRange, ExprPtr index, SourceRange range)
+      : Expr(Kind::IndexExpr, range),
+        name_(std::move(name)),
+        nameRange_(nameRange),
+        index_(std::move(index)) {}
+
+  const std::string& name() const { return name_; }
+  SourceRange nameRange() const { return nameRange_; }
+  const Expr* index() const { return index_.get(); }
+  Expr* index() { return index_.get(); }
+
+  /// Resolved array declaration. Null until semantic analysis.
+  Symbol* symbol() const { return symbol_; }
+  void setSymbol(Symbol* symbol) { symbol_ = symbol; }
+
+private:
+  std::string name_;
+  SourceRange nameRange_;
+  ExprPtr index_;
+  Symbol* symbol_ = nullptr;
+};
+
 class UnaryExpr final : public Expr {
 public:
   UnaryExpr(UnaryOp op, ExprPtr operand, SourceRange range)
@@ -216,14 +248,19 @@ using BlockPtr = std::unique_ptr<Block>;
 class VarDeclStmt final : public Stmt {
 public:
   VarDeclStmt(TypeSpec type, std::string name, SourceRange nameRange, ExprPtr init,
-              SourceRange range)
+              SourceRange range, unsigned arrayLength = 0)
       : Stmt(Kind::VarDeclStmt, range),
         type_(type),
         name_(std::move(name)),
         nameRange_(nameRange),
-        init_(std::move(init)) {}
+        init_(std::move(init)),
+        arrayLength_(arrayLength) {}
 
   TypeSpec declaredType() const { return type_; }
+  /// Declared length for `int a[10];`, or 0 when this is a scalar. Zero is
+  /// unambiguous because a zero-length array is rejected in the parser.
+  unsigned arrayLength() const { return arrayLength_; }
+  bool isArray() const { return arrayLength_ != 0; }
   const std::string& name() const { return name_; }
   SourceRange nameRange() const { return nameRange_; }
   /// Null when the declaration has no initializer.
@@ -238,19 +275,28 @@ private:
   std::string name_;
   SourceRange nameRange_;
   ExprPtr init_;
+  unsigned arrayLength_ = 0;
   Symbol* symbol_ = nullptr;
 };
 
 class AssignStmt final : public Stmt {
 public:
-  AssignStmt(std::string name, SourceRange nameRange, ExprPtr value, SourceRange range)
+  AssignStmt(std::string name, SourceRange nameRange, ExprPtr value, SourceRange range,
+             ExprPtr index = nullptr)
       : Stmt(Kind::AssignStmt, range),
         name_(std::move(name)),
         nameRange_(nameRange),
-        value_(std::move(value)) {}
+        value_(std::move(value)),
+        index_(std::move(index)) {}
 
   const std::string& name() const { return name_; }
   SourceRange nameRange() const { return nameRange_; }
+  /// Non-null for `a[i] = v`, null for `a = v`. The two are one statement kind
+  /// because everything else about them -- scope lookup, assignability, the
+  /// diagnostics -- is identical.
+  const Expr* index() const { return index_.get(); }
+  Expr* index() { return index_.get(); }
+  bool isIndexed() const { return index_ != nullptr; }
   const Expr* value() const { return value_.get(); }
   Expr* value() { return value_.get(); }
 
@@ -261,6 +307,7 @@ private:
   std::string name_;
   SourceRange nameRange_;
   ExprPtr value_;
+  ExprPtr index_;
   Symbol* symbol_ = nullptr;
 };
 

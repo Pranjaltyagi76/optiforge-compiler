@@ -1,0 +1,68 @@
+// Dense matrix multiply -- the benchmark `methodology.md` §2 asks for first and
+// the one Phase 12 had to record as impossible, because the language had no
+// arrays. Phase 13 added them; this is the benchmark that was waiting.
+//
+// Two dimensions by hand, as `m[r * N + c]`: the language has arrays but not
+// arrays of arrays, so a matrix is one flat block and the index arithmetic is
+// written out. That is also why the row stride is a parameter rather than a
+// literal -- nothing static can fold it away, which is the honest version of
+// this kernel.
+//
+// **The inner loop is the point.** It runs `size` times per entry, and its
+// trip count is a runtime value, so no static heuristic can know it. The
+// profile measures it exactly, which is the case profile-guided unrolling
+// exists for.
+//
+// Sized to the stack, not to taste: arrays are frame-allocated here, so three
+// 64x64 matrices are 98 KB and the multiply is repeated instead of enlarged.
+fn multiply(int size, int reps) -> int {
+    int a[4096];
+    int b[4096];
+    int c[4096];
+
+    // Deterministic fill, no randomness: the checksum has to be reproducible.
+    int i = 0;
+    while (i < size * size) {
+        a[i] = i % 7 - 3;
+        b[i] = i % 5 - 2;
+        c[i] = 0;
+        i = i + 1;
+    }
+
+    int rep = 0;
+    while (rep < reps) {
+        int row = 0;
+        while (row < size) {
+            int col = 0;
+            while (col < size) {
+                int sum = 0;
+                int k = 0;
+                // The hot loop: `size` iterations, three loads and a
+                // multiply-accumulate, no calls and no branches inside it.
+                while (k < size) {
+                    sum = sum + a[row * size + k] * b[k * size + col];
+                    k = k + 1;
+                }
+                c[row * size + col] = sum;
+                col = col + 1;
+            }
+            row = row + 1;
+        }
+        rep = rep + 1;
+    }
+
+    // A checksum of the result, so a build that computed something else -- or
+    // optimized the whole thing away -- is caught rather than reported as fast.
+    int total = 0;
+    i = 0;
+    while (i < size * size) {
+        total = total + c[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    print_int(multiply(64, 700));
+    return 0;
+}

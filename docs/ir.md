@@ -74,7 +74,7 @@ enum, mnemonic table, verifier and printer are all generated.
 | Logical | `not` |
 | Comparison | `icmp` `fcmp` — always produce `i1` |
 | Conversion | `sitofp` |
-| Memory | `alloca` `load` `store` |
+| Memory | `alloca` `load` `store` `gep` (Phase 13) |
 | Control flow | `br` `condbr` `ret` |
 | Calls | `call` |
 | SSA | `phi` (Phase 6), `copy` (Phase 6) |
@@ -145,6 +145,9 @@ not renumber the blocks of any other.
 |---|---|
 | `int x = e;` | `%x.addr = alloca i64` in the entry block, then `store` |
 | `x` | `%t = load i64, %x.addr` |
+| `int a[4];` | `%a.addr = alloca i64 x 4` in the entry block, **no store** |
+| `a[i]` | `%p = gep i64, %a.addr, i64 %i` then `%t = load i64, %p` |
+| `a[i] = e;` | `%p = gep i64, %a.addr, i64 %i` then `store` |
 | `a + b` | `add` / `fadd`, with `sitofp` inserted on the narrower side |
 | `a < b` | `icmp lt` / `fcmp lt` |
 | `f(a)` | `%t = call <type> @f(...)` |
@@ -160,6 +163,35 @@ rule so no call site has to remember it.
 
 **Parameters get stack slots too.** Assigning to a parameter then needs no
 special case; `mem2reg` removes the traffic later.
+
+### Arrays and `gep` (Phase 13)
+
+`alloca` gained an element count and the instruction set gained one opcode:
+
+```
+%a.addr = alloca i64 x 4              ; four consecutive elements
+%p      = gep i64, %a.addr, i64 %i    ; &a[i]
+%t      = load i64, %p
+```
+
+The count is 1 for every scalar, so nothing about an ordinary local changed.
+
+**Why an opcode rather than open-coded arithmetic.** `gep` could have been a
+`mul` by the element size and an `add`, and GVN would still have commoned two
+indexings of the same element. What that loses is checkability: the verifier can
+say "a pointer base and an integer index" about a `gep` and can say nothing
+useful about an `add` whose operands happen to be a pointer and a number. It
+also leaves the IR saying *what* is being computed rather than how, which is the
+property that makes `--emit=ir` worth reading.
+
+**An array is never promoted to a register.** `mem2reg` refuses any `alloca`
+whose users are not exclusively `load` and `store`, and every array use is a
+`gep`, so the existing rule excludes arrays without needing to know they exist.
+
+**Element size is the slot size, not the natural size.** Every element occupies
+eight bytes, `bool` included, so the backend scales the index by a constant 8.
+Packing would make element addressing disagree with the frame layout that every
+other value uses.
 
 ### Short-circuit evaluation
 
@@ -188,7 +220,9 @@ Runs after IR generation and, from Phase 7, after every pass. A failure is an
 - Operand counts and types match the opcode
 - Every operand lists its user
 - No operand refers to an instruction outside the function
-- `alloca` only in the entry block
+- `alloca` only in the entry block, and its element count is at least 1
+- `gep` produces a `ptr` from a `ptr` base and an `i64` index, and carries the
+  element type it addresses
 - `condbr` condition is `i1`; `br` has one successor, `condbr` two
 - `ret` matches the function's return type
 - Call arity, argument types and result type match the callee

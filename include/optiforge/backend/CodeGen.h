@@ -91,6 +91,11 @@ public:
   /// Blocks moved and jumps removed across the whole module.
   const LayoutResult& layout() const { return layout_; }
 
+  /// Frame size above which the prologue must probe the stack a page at a time
+  /// (`___chkstk_ms`). One 4 KB page, which is what the guard-page mechanism
+  /// this protects against is built on.
+  static constexpr std::int32_t kStackProbeThreshold = 4096;
+
 private:
   void lowerFunction(const ir::Function& function, MFunction& out);
 

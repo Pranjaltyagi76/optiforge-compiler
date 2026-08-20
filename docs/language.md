@@ -71,8 +71,8 @@ block          = "{" { statement } "}" ;
 statement      = var_decl | assign_stmt | if_stmt | while_stmt
                | return_stmt | expr_stmt | block ;
 
-var_decl       = type IDENT [ "=" expression ] ";" ;
-assign_stmt    = IDENT "=" expression ";" ;
+var_decl       = type IDENT [ "[" INT_LIT "]" ] [ "=" expression ] ";" ;
+assign_stmt    = IDENT [ "[" expression "]" ] "=" expression ";" ;
 if_stmt        = "if" "(" expression ")" block [ "else" ( block | if_stmt ) ] ;
 while_stmt     = "while" "(" expression ")" block ;
 return_stmt    = "return" [ expression ] ";" ;
@@ -87,7 +87,8 @@ additive       = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative = unary { ( "*" | "/" | "%" ) unary } ;
 unary          = [ "-" | "!" ] unary | primary ;
 primary        = INT_LIT | FLOAT_LIT | "true" | "false"
-               | IDENT | IDENT "(" [ arg_list ] ")" | "(" expression ")" ;
+               | IDENT | IDENT "[" expression "]"
+               | IDENT "(" [ arg_list ] ")" | "(" expression ")" ;
 arg_list       = expression { "," expression } ;
 ```
 
@@ -104,6 +105,7 @@ Loosest to tightest; **all binary operators are left-associative**.
 | 5 | `+` `-` |
 | 6 | `*` `/` `%` |
 | 7 | unary `-` `!` |
+| 8 | `a[i]` indexing, `f(...)` call |
 
 ### Nesting limit
 
@@ -120,8 +122,10 @@ reports an error rather than exhausting its stack.
 | `float` | IEEE-754 double | 8 bytes |
 | `bool` | `true` / `false` | 1 byte |
 | `void` | no value; function return type only | 0 |
+| `T[N]` | `N` consecutive elements of `T`, local only (§9) | 8 × N |
 
-`int` is **64-bit**. Variables and parameters may not have type `void`.
+`int` is **64-bit**. Variables and parameters may not have type `void`, and
+parameters may not have an array type.
 
 ### Conversions
 
@@ -305,17 +309,78 @@ an error and the compiler exits non-zero.
 
 ## 8. Not Supported
 
-Arrays, strings, structs, pointers, dynamic allocation, `for`, `break`,
-`continue`, explicit casts, bitwise operators, compound assignment (`+=`),
+Strings, structs, pointers, dynamic allocation, `for`, `break`, `continue`,
+explicit casts, bitwise operators, compound assignment (`+=`),
 increment/decrement (`++`), the ternary operator, global variables, multiple
 source files, and separate compilation.
 
-Arrays, `for`, `break`, and `continue` are Phase 13 candidates
-(`context/roadmap.md`).
+`for`, `break` and `continue` remain Phase 13 candidates
+(`context/roadmap.md`). Arrays arrived in Phase 13; see §9 for what they do
+and do not do.
 
 ---
 
-## 9. Complete Example
+## 9. Arrays
+
+Added in Phase 13. Fixed-length, local, one-dimensional.
+
+```of
+int  counts[16];       // sixteen ints, uninitialized
+bool seen[100];
+float xs[8];
+
+counts[0] = 1;
+counts[i + 1] = counts[i] * 2;
+int total = counts[3];
+```
+
+### The rules
+
+| Rule | Why |
+|---|---|
+| The length is an **integer literal**, not an expression | There are no named constants to fold, so a constant expression would have nothing to be for |
+| The length must be **positive** | A zero-length array has no valid index |
+| **No initializer**: `int a[3] = 0;` is an error | There is no aggregate initializer syntax, so the meaning would have to be invented |
+| Elements are **not zero-initialized** | Unlike a scalar, which is. See below. |
+| The index must be `int` | `a[true]` is an error, as `if (x)` is |
+| An array name is **not a value** — `int b = a;`, `f(a)` and `return a;` are all errors | There are no pointers for it to decay to |
+| **No whole-array assignment**: `a = b;` is an error | Aggregate copy is not implemented |
+| Arrays are **local only** — no array parameters, no array returns | Follows from an array name not being a value |
+| **No bounds checking** | `a[99]` on `int a[3]` reads or writes other stack memory. This is the one place the language is memory-unsafe, and it is stated rather than hidden. |
+
+### Two consequences worth knowing
+
+**Elements start with whatever was on the stack.** Every scalar declaration
+emits a zero store, because otherwise `mem2reg` would have to invent a value
+for an unwritten local and could invent a different one at different
+optimization levels — which would break the differential suite silently. An
+array is never promoted (its address is taken by every use), so that
+divergence cannot arise, and zeroing would instead cost a loop of `length`
+stores in every function that declares one. **Read an element before writing it
+and the value is undefined.**
+
+**Two dimensions are written by hand.** There are no arrays of arrays, so a
+matrix is one flat block:
+
+```of
+m[row * size + col] = value;
+```
+
+`bench/programs/matmul.of` is the worked example.
+
+### Sizing
+
+Arrays live in the stack frame, and the stack is 1 MB. Every element occupies
+**eight bytes regardless of type**, so `bool[50000]` costs 400 KB, not 50 KB —
+the frame does not pack, because packing would make element addressing
+disagree with the slot layout everything else uses.
+
+A frame over 4 KB is probed a page at a time in the prologue, which the
+platform requires; that is handled by the compiler and costs one call.
+
+---
+
+## 10. Complete Example
 
 ```of
 // Sums 0..n-1 and prints the result.

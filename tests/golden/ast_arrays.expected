@@ -1,0 +1,32 @@
+=== exit ===
+0
+=== stdout ===
+Program
+  FunctionDecl 'main' -> int
+    Block
+      VarDeclStmt 'a' : int[4]
+      VarDeclStmt 'i' : int
+        IntLiteral 0 : int
+      WhileStmt
+        cond:
+          BinaryExpr '<' : bool
+            VarRef 'i' : int
+            IntLiteral 4 : int
+        body:
+          Block
+            AssignStmt 'a' [indexed]
+              VarRef 'i' : int
+              BinaryExpr '*' : int
+                VarRef 'i' : int
+                VarRef 'i' : int
+            AssignStmt 'i'
+              BinaryExpr '+' : int
+                VarRef 'i' : int
+                IntLiteral 1 : int
+      ExprStmt
+        CallExpr 'print_int' : void
+          Index 'a' : int
+            IntLiteral 3 : int
+      ReturnStmt
+        IntLiteral 0 : int
+=== stderr ===

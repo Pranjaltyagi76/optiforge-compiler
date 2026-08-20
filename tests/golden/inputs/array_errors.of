@@ -1,0 +1,12 @@
+// Every way of getting arrays wrong that the language can express.
+fn main() -> int {
+    int a[3];
+    int s = 0;
+    s = a;              // an array name is not a value
+    a = 5;              // no whole-array assignment
+    s = s[0];           // indexing a scalar
+    a[true] = 1;        // a non-int index
+    int c[2] = 7;       // no initializer syntax for an aggregate
+    print_int(a[0]);
+    return 0;
+}

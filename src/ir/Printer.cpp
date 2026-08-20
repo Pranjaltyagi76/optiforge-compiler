@@ -78,6 +78,18 @@ void printInstruction(const Instruction& instruction, std::ostream& out) {
   switch (opcode) {
     case Opcode::Alloca:
       out << " " << instruction.allocatedType()->name();
+      if (instruction.allocatedCount() != 1) {
+        // Printed only for arrays, so every existing dump is byte-identical.
+        out << " x " << instruction.allocatedCount();
+      }
+      break;
+
+    case Opcode::Gep:
+      // Element type, then base and index. Printing the type alone would leave
+      // the index looking like a dead value in the dump.
+      out << " " << instruction.allocatedType()->name() << ", "
+          << operandText(instruction.operand(0)) << ", "
+          << typedOperand(instruction.operand(1));
       break;
 
     case Opcode::ProfInc:

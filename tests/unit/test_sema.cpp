@@ -559,3 +559,111 @@ TEST("analysis of a program with parse errors does not crash") {
     CHECK(r->program != nullptr);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Arrays (Phase 13)
+// ---------------------------------------------------------------------------
+
+TEST("an array declaration gives the symbol an array type") {
+  auto r = analyze("fn f() -> void { int a[4]; a[0] = 1; }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+  CHECK(r->tree().find("VarDeclStmt 'a' : int[4]") != std::string::npos);
+  CHECK(r->tree().find("AssignStmt 'a' [indexed]") != std::string::npos);
+}
+
+TEST("array types are interned, so identity is pointer equality") {
+  CHECK(Type::getArray(Type::getInt(), 4) == Type::getArray(Type::getInt(), 4));
+  CHECK(Type::getArray(Type::getInt(), 4) != Type::getArray(Type::getInt(), 5));
+  CHECK(Type::getArray(Type::getInt(), 4) != Type::getArray(Type::getFloat(), 4));
+}
+
+TEST("an array type reports its element, length and total size") {
+  const Type* t = Type::getArray(Type::getInt(), 10);
+  CHECK(t->isArray());
+  CHECK(!t->isScalar());
+  CHECK(t->elementType() == Type::getInt());
+  CHECK_EQ(t->length(), 10u);
+  // Eight bytes per element, the slot size -- including for bool.
+  CHECK_EQ(t->sizeInBytes(), 80u);
+  CHECK_EQ(Type::getArray(Type::getBool(), 10)->sizeInBytes(), 80u);
+  CHECK_EQ(std::string(t->name()), std::string("int[10]"));
+}
+
+TEST("indexing yields the element type") {
+  auto r = analyze("fn f() -> int { int a[4]; return a[2]; }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+}
+
+TEST("a float array indexes to float") {
+  auto r = analyze("fn f() -> float { float a[4]; return a[0]; }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+}
+
+TEST("an array name is not a value") {
+  auto r = analyze("fn f() -> void { int a[4]; int b = a; }");
+  CHECK(!r->ok);
+  CHECK(r->says("cannot be used as a value"));
+}
+
+TEST("a whole array cannot be assigned") {
+  auto r = analyze("fn f() -> void { int a[4]; a = 5; }");
+  CHECK(!r->ok);
+  CHECK(r->says("as a whole"));
+}
+
+TEST("a scalar cannot be indexed") {
+  auto r = analyze("fn f() -> void { int s = 0; s = s[0]; }");
+  CHECK(!r->ok);
+  CHECK(r->says("is not an array"));
+}
+
+TEST("an index must be an int") {
+  auto r = analyze("fn f() -> void { int a[4]; a[true] = 1; }");
+  CHECK(!r->ok);
+  CHECK(r->says("array index must be of type 'int'"));
+
+  auto read = analyze("fn f() -> int { int a[4]; return a[1.5]; }");
+  CHECK(!read->ok);
+  CHECK(read->says("array index must be of type 'int'"));
+}
+
+TEST("an array declaration rejects an initializer") {
+  auto r = analyze("fn f() -> void { int a[2] = 7; }");
+  CHECK(!r->ok);
+  CHECK(r->says("cannot have an initializer"));
+}
+
+TEST("a zero or negative array length is rejected in the parser") {
+  auto zero = analyze("fn f() -> void { int a[0]; }");
+  CHECK(zero->parseError);
+  CHECK(zero->says("array length must be positive"));
+
+  // `-1` is unary minus applied to a literal, not a literal, so this is caught
+  // one step earlier -- by the token the length is required to be. Asserting on
+  // `ok` would pass for the wrong reason: sema succeeds because the parser
+  // produced nothing for it to reject.
+  auto negative = analyze("fn f() -> void { int a[-1]; }");
+  CHECK(negative->parseError);
+  CHECK(negative->says("expected an integer literal as an array length"));
+}
+
+TEST("assigning the wrong element type is caught") {
+  auto r = analyze("fn f() -> void { bool a[2]; a[0] = 1; }");
+  CHECK(!r->ok);
+  CHECK(r->says("cannot assign a value of type 'int'"));
+}
+
+TEST("an int element widens to float on assignment, as a scalar would") {
+  auto r = analyze("fn f() -> void { float a[2]; a[0] = 1; }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+}
+
+TEST("indexing an undeclared name reports the name, not the index") {
+  auto r = analyze("fn f() -> void { nosuch[0] = 1; }");
+  CHECK(!r->ok);
+  CHECK(r->says("undeclared variable 'nosuch'"));
+}

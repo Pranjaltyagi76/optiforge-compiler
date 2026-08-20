@@ -52,7 +52,7 @@ If that sentence is true at the end, the project succeeded. Everything below is 
 | 10 | Profile Ingestion & Hot-Path Detection | `.prof` parser, hot/warm/cold classification | 1.5 weeks |
 | 11 | **Profile-Guided Optimization** | **The defining feature** — PGO inlining, unrolling, layout | 3 weeks |
 | 12 | Benchmarking & Evidence | Benchmark suite, speedup measurements, report | 1.5 weeks |
-| 13 | Stretch Goals | Arrays, `for`/`break`/`continue`, more passes, more targets | open |
+| 13 | Stretch Goals | **Arrays landed**; `for`/`break`/`continue`, more passes, more targets remain | open |
 
 **Total to a defensible, complete project: ~26 weeks of part-time work (Phases 0–12).**
 **Minimum viable demonstrable project: Phases 0–4 + 9 + 10 + a single PGO decision (~12 weeks).**
@@ -542,11 +542,77 @@ met criterion stand in for the missed target.
 ---
 
 ### Phase 13 — Stretch Goals *(only after 0–12 are done)*
-- **Language:** arrays, `for`, `break`/`continue`, strings, structs, pointers.
-- **Optimization:** vectorization, tail-call elimination, jump threading, inter-procedural constant propagation, partial redundancy elimination.
-- **Backend:** instruction scheduling, an ARM64 target, direct object-file emission (no external assembler).
-- **Profiling:** sampling-based profiler, value profiling for indirect-call specialization, Ball–Larus edge-profile minimization.
-- **Infrastructure:** fuzzing the frontend, differential testing against a reference C compiler.
+
+Unlike every phase before it, this one is a menu rather than a specification:
+no exit criteria were ever written for it and its effort is open. Items are
+taken in the order `metrics/reports/phase-12-evaluation.md` §8 argued for, and
+each is marked with what it actually cost.
+
+#### Language
+
+- [x] **Arrays.** Fixed-length, local, one-dimensional. `int a[10];`, `a[i]`,
+      `a[i] = v`. Phase 12 named this first because four of its open actions and
+      three of its recorded gaps were one language feature.
+      - IR: `alloca` gained an element count, and one opcode — `gep` — was
+        added. Both are described in `docs/ir.md` §7.
+      - **`mem2reg` needed no change.** Its promotability test already refused
+        any `alloca` whose users are not exclusively `load` and `store`, and
+        every array use is a `gep`, so arrays were excluded by a rule written
+        in Phase 6 for a reason that had not arrived yet.
+      - Deliberately excluded, and each is a decision rather than an omission:
+        no bounds checking, no array parameters or returns, no whole-array
+        assignment, no initializer syntax, no arrays of arrays, and elements
+        are not zero-initialized. `docs/language.md` §9 gives the reason for
+        every one.
+      - Unblocked `bench/programs/matmul.of` and `bench/programs/sieve.of`, the
+        two benchmark shapes `methodology.md` §2 asks for that Phase 12 had to
+        record as impossible.
+- [ ] `for`, `break`, `continue`.
+- [ ] Strings, structs, pointers.
+
+#### Optimization
+- [ ] Unroller cost model — Phase 12's largest correctable loss (−6.8 points on
+      `loop_kernel.of`).
+- [ ] Multi-block inlining.
+- [ ] Vectorization, tail-call elimination, jump threading, inter-procedural
+      constant propagation, partial redundancy elimination.
+
+#### Backend
+- [ ] Instruction scheduling, an ARM64 target, direct object-file emission.
+      `docs/adding-a-target.md` costs the ARM64 case out before anyone starts.
+
+#### Profiling
+- [ ] Sampling-based profiler, value profiling for indirect-call
+      specialization, Ball–Larus edge-profile minimization.
+
+#### Infrastructure
+- [ ] Fuzzing the frontend, differential testing against a reference C
+      compiler.
+
+---
+
+### Two bugs arrays exposed, both older than arrays
+
+Recorded here rather than in the item above, because neither is an arrays
+feature and both had been latent since Phase 4.
+
+**A frame larger than 4 KB was never probed.** The Microsoft x64 ABI requires
+the prologue to touch each page of a large frame in turn, because Windows grows
+the stack by trapping a write to a single guard page. Moving `rsp` past that
+page in one subtraction and then writing beyond it never touches the guard, so
+the write lands on unmapped memory — and the process dies at the first array
+access, nowhere near the prologue that caused it. The fix is the standard
+`___chkstk_ms` sequence, and `tests/e2e/large_frame.of` keeps it. **Before
+arrays no function in this language could reach a 4 KB frame**, so the missing
+probe had never been reachable; it was found within minutes of arrays existing.
+
+**`gep` miscompiled whenever the allocator gave it its own index's register.**
+The first lowering materialized the base address into the destination and *then*
+read the index — so if the index happened to live in that register, it was
+already gone. It appeared at `-O0` and not at `-O1` or `-O2`, which is exactly
+the shape of bug the differential suite exists for: the same program printing
+different answers at different optimization levels. Reading the index before
+writing the destination is the whole fix.
 
 ---
 

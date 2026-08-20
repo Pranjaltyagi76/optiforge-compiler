@@ -1,0 +1,68 @@
+// Sieve of Eratosthenes -- the corpus's first **cache-resident, strided**
+// benchmark, and the nearest this language can get to the gap Phase 12 named as
+// its most consequential.
+//
+// Be precise about what it is and is not. It strides a 400 KB array, which is
+// L2-resident on `windows-mingw` (4 MB L2), so it is **not** DRAM-bound and it
+// should not be described as such. A genuinely memory-bound benchmark needs a
+// working set past the 16 MB L3, and arrays here are frame-allocated against a
+// 1 MB stack -- so it cannot exist until the language has heap allocation.
+// What this does bring that nothing else in the corpus has is a *strided*
+// access pattern over a large-ish array, and a branch whose bias changes as the
+// run proceeds.
+//
+// The inner loop is a strided write with a biased exit: for a small prime it
+// runs thousands of times, for a large one it runs once or not at all. The
+// distribution across the whole run is something only a profile can know.
+//
+// `bool` occupies a whole eight-byte slot in this backend (see
+// `Type::sizeInBytes`), so 50,000 flags cost 400 KB rather than 50 KB. That
+// widens the working set eightfold, which suits this benchmark, but it is a
+// property of the frame layout and not of the algorithm -- worth knowing before
+// comparing this number to a sieve written anywhere else.
+fn count(int limit, int reps) -> int {
+    bool composite[50000];
+    int total = 0;
+
+    int rep = 0;
+    while (rep < reps) {
+        int i = 0;
+        while (i < limit) {
+            composite[i] = false;
+            i = i + 1;
+        }
+
+        int p = 2;
+        while (p * p < limit) {
+            if (!composite[p]) {
+                // The strided write. Its trip count depends on p, so it is long
+                // for the first few primes and empty for most of the rest.
+                int multiple = p * p;
+                while (multiple < limit) {
+                    composite[multiple] = true;
+                    multiple = multiple + p;
+                }
+            }
+            p = p + 1;
+        }
+
+        total = 0;
+        int n = 2;
+        while (n < limit) {
+            if (!composite[n]) {
+                total = total + 1;
+            }
+            n = n + 1;
+        }
+        rep = rep + 1;
+    }
+
+    return total;
+}
+
+fn main() -> int {
+    // 50,000 has 5,133 primes below it -- a checksum with a known right answer,
+    // which is worth more than an arbitrary one.
+    print_int(count(50000, 800));
+    return 0;
+}

@@ -56,6 +56,7 @@ private:
   const Type* analyzeUnary(UnaryExpr& expr);
   const Type* analyzeCall(CallExpr& expr);
   const Type* analyzeVarRef(VarRefExpr& expr);
+  const Type* analyzeIndex(IndexExpr& expr);
 
   /// Checks an expression used as an `if`/`while` condition. Requires exactly
   /// `bool`: there is no int-to-bool conversion (FE-29, LANG-32).

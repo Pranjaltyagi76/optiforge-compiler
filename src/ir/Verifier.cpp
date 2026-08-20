@@ -231,10 +231,32 @@ void Verifier::checkFunction(const Function& function) {
           if (instruction->allocatedType() == nullptr) {
             report(context, "'alloca' has no allocated type");
           }
+          if (instruction->allocatedCount() == 0) {
+            // A zero-length array would produce a slot no store can reach and
+            // an index expression with no valid value.
+            report(context, "'alloca' must reserve at least one element");
+          }
           if (block.get() != entry) {
             // An alloca inside a loop would grow the stack every iteration, and
             // mem2reg only promotes entry-block allocas (Phase 6).
             report(context, "'alloca' must be in the entry block");
+          }
+          break;
+
+        case Opcode::Gep:
+          if (!instruction->type()->isPtr()) {
+            report(context, "'gep' must produce a pointer");
+          }
+          if (instruction->allocatedType() == nullptr) {
+            report(context, "'gep' has no element type");
+          }
+          if (instruction->operandCount() == 2) {
+            if (!instruction->operand(0)->type()->isPtr()) {
+              report(context, "'gep' requires a pointer as its base");
+            }
+            if (!instruction->operand(1)->type()->isI64()) {
+              report(context, "'gep' requires an i64 index");
+            }
           }
           break;
 

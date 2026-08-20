@@ -70,6 +70,10 @@ std::string_view toString(TokenKind kind) {
       return "l_brace";
     case TokenKind::RBrace:
       return "r_brace";
+    case TokenKind::LBracket:
+      return "l_bracket";
+    case TokenKind::RBracket:
+      return "r_bracket";
     case TokenKind::Comma:
       return "comma";
     case TokenKind::Semicolon:
@@ -152,6 +156,10 @@ std::string_view describe(TokenKind kind) {
       return "'{'";
     case TokenKind::RBrace:
       return "'}'";
+    case TokenKind::LBracket:
+      return "'['";
+    case TokenKind::RBracket:
+      return "']'";
     case TokenKind::Comma:
       return "','";
     case TokenKind::Semicolon:

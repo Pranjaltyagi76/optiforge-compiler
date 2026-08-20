@@ -127,6 +127,8 @@ One table matters more than all the others. It is the centrepiece of the final r
 
 Times in ms. **Three benchmarks beat `-O2` above the noise floor, which is the Phase 12 exit criterion, and it is met. NFR-10's ≥10% on three is a different bar and is missed.** Both statements belong here; neither substitutes for the other.
 
+> **The corpus has grown since this table was measured.** Phase 13 added arrays and with them `matmul.of` and `sieve.of`, so `bench/programs/` now holds ten programs rather than eight. The table above is the eight-program run and is left as measured; re-running the harness today produces ten rows and the two new ones have no committed numbers yet.
+
 The **Why** column is mandatory. A speedup you cannot attribute to a specific PGO decision is a speedup you cannot defend, and may well be measurement noise.
 
 ---

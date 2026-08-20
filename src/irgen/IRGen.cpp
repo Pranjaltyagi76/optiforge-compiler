@@ -49,6 +49,12 @@ const ir::Type* IRGen::lowerType(const Type* type) {
       return ir::Type::getI1();
     case Type::Kind::Void:
       return ir::Type::getVoid();
+    case Type::Kind::Array:
+      // An array has no first-class IR type: it exists only as a stack slot,
+      // and every expression that mentions one indexes it. `lowerType` is
+      // asked for the type of a *value*, so reaching here with an array means
+      // sema let an array name through as an expression, which it must not.
+      return ir::Type::getPtr();
   }
   return ir::Type::getVoid();
 }
@@ -215,6 +221,21 @@ void IRGen::lowerStmt(const Stmt& stmt) {
 void IRGen::lowerVarDecl(const VarDeclStmt& decl) {
   const ir::Type* type = lowerType(decl.declaredType());
 
+  if (decl.isArray()) {
+    // One slot of `length` elements. Deliberately *not* zero-initialized: the
+    // scalar zero-store below exists so mem2reg cannot invent a value for an
+    // unwritten local, and an array is never promoted -- its `gep` users make
+    // `isPromotable` refuse it -- so there is no such divergence to prevent.
+    // Zeroing would instead cost a loop of `length` stores in every function
+    // that declares one, at every optimization level.
+    ir::Value* slot =
+        builder_->createEntryAlloca(type, decl.name(), decl.arrayLength());
+    if (decl.symbol() != nullptr) {
+      slots_[decl.symbol()] = slot;
+    }
+    return;
+  }
+
   // The slot goes in the entry block wherever the declaration appears; the
   // builder owns that rule.
   ir::Value* slot = builder_->createEntryAlloca(type, decl.name());
@@ -254,6 +275,22 @@ void IRGen::lowerAssign(const AssignStmt& assign) {
   if (it == slots_.end() || value == nullptr) {
     return;
   }
+
+  if (assign.isIndexed()) {
+    const Type* arrayType = assign.symbol()->type;
+    if (arrayType == nullptr || !arrayType->isArray()) {
+      return;  // sema already reported it
+    }
+    const ir::Type* elementType = lowerType(arrayType->elementType());
+    ir::Value* index = lowerExpr(*assign.index());
+    if (index == nullptr) {
+      return;
+    }
+    ir::Value* address = builder_->createGep(it->second, index, elementType);
+    builder_->createStore(convert(value, elementType), address);
+    return;
+  }
+
   const ir::Type* target = lowerType(assign.symbol()->type);
   builder_->createStore(convert(value, target), it->second);
 }
@@ -346,6 +383,25 @@ ir::Value* IRGen::lowerExpr(const Expr& expr) {
         return nullptr;
       }
       return builder_->createLoad(it->second, lowerType(ref.type()));
+    }
+
+    case Node::Kind::IndexExpr: {
+      const auto& index = static_cast<const IndexExpr&>(expr);
+      const auto it = slots_.find(index.symbol());
+      if (it == slots_.end()) {
+        return nullptr;
+      }
+      const Type* arrayType = index.symbol()->type;
+      if (arrayType == nullptr || !arrayType->isArray()) {
+        return nullptr;
+      }
+      const ir::Type* elementType = lowerType(arrayType->elementType());
+      ir::Value* offset = lowerExpr(*index.index());
+      if (offset == nullptr) {
+        return nullptr;
+      }
+      ir::Value* address = builder_->createGep(it->second, offset, elementType);
+      return builder_->createLoad(address, elementType);
     }
 
     case Node::Kind::UnaryExpr:

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -45,7 +47,18 @@ public:
   /// entry-block slots. Keeping that rule here rather than at each call site
   /// is what stops it being forgotten -- it already was once, for variables
   /// declared inside a loop body.
-  Instruction* createEntryAlloca(const Type* allocatedType, const std::string& name);
+  /// A stack slot for `count` consecutive elements of `allocatedType`.
+  ///
+  /// `count` defaults to 1, so every existing caller means what it always
+  /// meant and arrays cost the scalar path nothing.
+  Instruction* createEntryAlloca(const Type* allocatedType, const std::string& name,
+                                 std::uint32_t count = 1);
+
+  /// Address of element `index` of the array at `base` (Phase 13).
+  ///
+  /// `elementType` is what the resulting pointer points at, which the loads and
+  /// stores built on top of it need in order to know their own type.
+  Value* createGep(Value* base, Value* index, const Type* elementType);
   Value* createLoad(Value* address, const Type* resultType);
   void createStore(Value* value, Value* address);
 

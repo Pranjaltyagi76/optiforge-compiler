@@ -1,0 +1,73 @@
+// A frame larger than one 4 KB page, which Windows will not let a function
+// use without probing for it (`___chkstk_ms`).
+//
+// Before arrays no function in this language could reach a 4 KB frame, so the
+// missing probe was unreachable rather than absent. It is a real ABI
+// requirement and this is the test that keeps it: without the probe the
+// process dies at the first write past the guard page, several instructions
+// after the prologue that actually caused it.
+//
+// Three sizes: just over one page, well past it, and past the point where the
+// operating system has to move the guard more than once.
+//
+// EXPECT-OUTPUT: 524800
+// EXPECT-OUTPUT: 12497500
+// EXPECT-OUTPUT: 1249975000
+
+// 1024 ints = 8 KB, two pages.
+fn twoPages() -> int {
+    int a[1024];
+    int i = 0;
+    while (i < 1024) {
+        a[i] = i + 1;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 1024) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// 5000 ints = 40 KB.
+fn tenPages() -> int {
+    int a[5000];
+    int i = 0;
+    while (i < 5000) {
+        a[i] = i;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 5000) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// 50000 ints = 400 KB, which needs the guard page moved many times over.
+fn manyPages() -> int {
+    int a[50000];
+    int i = 0;
+    while (i < 50000) {
+        a[i] = i;
+        i = i + 1;
+    }
+    int total = 0;
+    i = 0;
+    while (i < 50000) {
+        total = total + a[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() -> int {
+    print_int(twoPages());
+    print_int(tenPages());
+    print_int(manyPages());
+    return 0;
+}

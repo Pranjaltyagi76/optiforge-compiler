@@ -390,6 +390,28 @@ StmtPtr Parser::parseVarDecl() {
   const SourceRange nameRange = name->range();
   std::string varName(name->lexeme);
 
+  // `int a[10];` -- the length is a literal, not an expression. A constant
+  // expression would need folding before sema, and there is no case for it
+  // until the language has named constants.
+  unsigned arrayLength = 0;
+  if (match(TokenKind::LBracket)) {
+    const Token* lengthToken = expect(TokenKind::IntLiteral, "as an array length");
+    if (lengthToken == nullptr) {
+      return nullptr;
+    }
+    if (lengthToken->intValue <= 0) {
+      // Through the parser's own error path, not the diagnostic engine
+      // directly: `hadError()` is what tells the driver a parse failed, and
+      // reporting round it would leave a program that looks well-formed.
+      errorAt(*lengthToken, "array length must be positive");
+      return nullptr;
+    }
+    arrayLength = static_cast<unsigned>(lengthToken->intValue);
+    if (expect(TokenKind::RBracket, "after an array length") == nullptr) {
+      return nullptr;
+    }
+  }
+
   ExprPtr init;
   if (match(TokenKind::Assign)) {
     init = parseExpression();
@@ -404,7 +426,7 @@ StmtPtr Parser::parseVarDecl() {
   }
 
   return std::make_unique<VarDeclStmt>(type, std::move(varName), nameRange, std::move(init),
-                                       spanning(begin, semi->endLoc()));
+                                       spanning(begin, semi->endLoc()), arrayLength);
 }
 
 StmtPtr Parser::parseIfStmt() {
@@ -501,21 +523,48 @@ StmtPtr Parser::parseAssignOrExprStmt() {
 
   // Assignment is a statement, not an expression, so one token of lookahead
   // distinguishes it without any backtracking.
-  if (check(TokenKind::Identifier) && peek(1).is(TokenKind::Assign)) {
+  if (check(TokenKind::Identifier) &&
+      (peek(1).is(TokenKind::Assign) || peek(1).is(TokenKind::LBracket))) {
+    // Two tokens of lookahead now, still no backtracking: an identifier
+    // followed by '=' is a scalar assignment, and one followed by '[' is an
+    // indexed assignment *or* an index expression used as a statement. Only
+    // the first two are assignments, so `a[i]` alone falls through to the
+    // expression path below by rewinding to where this started.
+    const std::size_t rewind = current_;
     const Token& name = advance();
     const SourceRange nameRange = name.range();
-    advance();  // '='
 
-    ExprPtr value = parseExpression();
-    if (value == nullptr) {
-      return nullptr;
+    ExprPtr index;
+    if (match(TokenKind::LBracket)) {
+      index = parseExpression();
+      if (index == nullptr) {
+        return nullptr;
+      }
+      if (expect(TokenKind::RBracket, "after an array index") == nullptr) {
+        return nullptr;
+      }
     }
-    const Token* semi = expectSemicolon("after an assignment");
-    if (semi == nullptr) {
-      return nullptr;
+
+    if (check(TokenKind::Assign)) {
+      advance();  // '='
+      ExprPtr value = parseExpression();
+      if (value == nullptr) {
+        return nullptr;
+      }
+      const Token* semi = expectSemicolon("after an assignment");
+      if (semi == nullptr) {
+        return nullptr;
+      }
+      return std::make_unique<AssignStmt>(std::string(name.lexeme), nameRange,
+                                          std::move(value),
+                                          spanning(begin, semi->endLoc()),
+                                          std::move(index));
     }
-    return std::make_unique<AssignStmt>(std::string(name.lexeme), nameRange, std::move(value),
-                                        spanning(begin, semi->endLoc()));
+
+    // Not an assignment after all -- `a[i];` as an expression statement. Nothing
+    // was reported while scanning the index, so rewinding costs a re-parse and
+    // no duplicate diagnostics.
+    current_ = rewind;
   }
 
   ExprPtr expr = parseExpression();
@@ -608,6 +657,20 @@ ExprPtr Parser::parsePrimaryExpr() {
 
     case TokenKind::Identifier: {
       advance();
+      if (check(TokenKind::LBracket)) {
+        advance();  // '['
+        ExprPtr index = parseExpression();
+        if (index == nullptr) {
+          return nullptr;
+        }
+        const Token* close = expect(TokenKind::RBracket, "after an array index");
+        if (close == nullptr) {
+          return nullptr;
+        }
+        return std::make_unique<IndexExpr>(std::string(token.lexeme), token.range(),
+                                           std::move(index),
+                                           spanning(token.loc, close->endLoc()));
+      }
       if (!check(TokenKind::LParen)) {
         return std::make_unique<VarRefExpr>(std::string(token.lexeme), token.range());
       }

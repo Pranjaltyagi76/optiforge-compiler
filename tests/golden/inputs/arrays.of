@@ -1,0 +1,11 @@
+// Pins the lowering of an array declaration and of indexed load and store.
+fn main() -> int {
+    int a[4];
+    int i = 0;
+    while (i < 4) {
+        a[i] = i * i;
+        i = i + 1;
+    }
+    print_int(a[3]);
+    return 0;
+}
