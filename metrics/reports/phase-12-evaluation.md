@@ -117,7 +117,7 @@ work — and the second would be measuring the benchmark writer, not the compile
 | Metric | Name | Value | Target | Met? | vs Phase 11 |
 |---|---|---|---|---|---|
 | C-05 | Differential pass rate | 100% (8 programs × 5 configurations) | 100% | ✅ | held |
-| C-01/C-02 | Unit / golden pass rate | 383 / 46 | 100% | ✅ | 379 / 45 |
+| C-01/C-02 | Unit / golden pass rate | 384 / 46 | 100% | ✅ | 379 / 45 |
 | Q-02 | Runtime spread | worst 1.8% | < 3% | ✅ | first measured |
 | G-01 | PGO ≥10% on ≥3 benchmarks | 1 benchmark | 3 | ❌ | first measured |
 | G-02 | Per-benchmark speedup | +15.8% … −7.1% | report all | ✅ | 5.5% best → **15.8%** best |
