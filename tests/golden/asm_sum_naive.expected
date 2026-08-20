@@ -19,22 +19,15 @@ sum:
 	movq       %rax, -24(%rbp)
 	movq       $0, %rax                        # store
 	movq       %rax, -32(%rbp)
-	jmp        .L_sum_while_cond_1             # br
 .L_sum_while_cond_1:
 	movq       -32(%rbp), %rax                 # %t0 = load
 	movq       %rax, -40(%rbp)
 	movq       -16(%rbp), %rax                 # %t1 = load
 	movq       %rax, -48(%rbp)
-	movq       -40(%rbp), %rax                 # %t2 = icmp
+	movq       -40(%rbp), %rax                 # condbr
 	movq       -48(%rbp), %r10
-	cmpq       %r10, %rax
-	setl       %al                             # 8-bit form
-	movzbq     %al, %rax
-	movq       %rax, -56(%rbp)
-	movq       -56(%rbp), %rax                 # condbr
-	testq      %rax, %rax
-	jne        .L_sum_while_body_2
-	jmp        .L_sum_while_end_3
+	cmpq       %r10, %rax                      # fused with the branch below
+	jge        .L_sum_while_end_3              # inverted: hot side falls through
 .L_sum_while_body_2:
 	movq       -24(%rbp), %rax                 # %t3 = load
 	movq       %rax, -64(%rbp)

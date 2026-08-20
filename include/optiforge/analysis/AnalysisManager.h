@@ -56,6 +56,10 @@ public:
   template <class A>
   const typename A::Result* getCached(const ir::Function& function) const {
     const Key key{std::type_index(typeid(A)), &function};
+    const auto supplied = external_.find(key);
+    if (supplied != external_.end()) {
+      return static_cast<const typename A::Result*>(supplied->second.get());
+    }
     const auto it = cache_.find(key);
     return it == cache_.end() ? nullptr
                               : static_cast<const typename A::Result*>(it->second.get());
@@ -70,7 +74,13 @@ public:
   /// `getCached` returns null for the first and a valid pointer for the second.
   template <class A>
   void provide(const ir::Function& function, std::shared_ptr<typename A::Result> result) {
-    cache_[Key{std::type_index(typeid(A)), &function}] = std::move(result);
+    // Kept apart from the cache, and deliberately so. A cached analysis is
+    // *derived* from the IR, so changing the IR invalidates it. A supplied one
+    // is not: nothing a pass does to the IR can change what the program did
+    // when it ran. Putting the profile in the cache meant the first pass that
+    // changed anything threw it away, and every profile-guided decision after
+    // that silently took the no-profile path.
+    external_[Key{std::type_index(typeid(A)), &function}] = std::move(result);
   }
 
   /// Drops every result for one function. Called after a pass reports that it
@@ -88,7 +98,13 @@ public:
     cache_.erase(Key{std::type_index(typeid(A)), &function});
   }
 
+  /// Drops everything derived from the IR. Supplied results survive, because
+  /// they were never derived from it.
   void invalidateAll() { cache_.clear(); }
+
+  /// Drops supplied results too. Only the driver has cause to do this, and only
+  /// when the module itself is going away.
+  void forgetSupplied() { external_.clear(); }
 
   /// How many analyses have actually been computed, and how many requests were
   /// served from cache. Used by the tests to prove caching works rather than
@@ -102,6 +118,8 @@ private:
   // std::map rather than unordered_map: no hashing needed for a pair with a
   // type_index, and ordered iteration keeps invalidation deterministic.
   std::map<Key, std::shared_ptr<void>> cache_;
+  /// Results handed in from outside rather than computed. Not invalidated.
+  std::map<Key, std::shared_ptr<void>> external_;
   unsigned computations_ = 0;
   unsigned hits_ = 0;
 };

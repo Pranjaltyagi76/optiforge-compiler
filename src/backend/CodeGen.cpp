@@ -32,6 +32,20 @@ std::string sanitize(const std::string& text) {
   return out;
 }
 
+/// The conditional jump for a signed comparison, for branching on flags
+/// directly rather than materializing a boolean and testing it.
+const char* jccForInt(Predicate predicate) {
+  switch (predicate) {
+    case Predicate::Eq: return "je";
+    case Predicate::Ne: return "jne";
+    case Predicate::Lt: return "jl";
+    case Predicate::Gt: return "jg";
+    case Predicate::Le: return "jle";
+    case Predicate::Ge: return "jge";
+  }
+  return "je";
+}
+
 const char* setccForInt(Predicate predicate) {
   switch (predicate) {
     case Predicate::Eq: return "sete";
@@ -660,7 +674,21 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
       break;
     }
 
-    case Opcode::ICmp: lowerCompare(instruction, /*isFloat=*/false); break;
+    case Opcode::ICmp:
+      // A comparison that feeds nothing but the branch after it needs no
+      // result at all: the branch reads the flags. Skipping it here removes
+      // three instructions -- setcc, movzbq, testq -- from every iteration of
+      // every loop, which on a tight loop is a third of the work.
+      //
+      // Only integer comparisons fuse. comisd sets the flags so that equality
+      // cannot be tested with one jump (a NaN pair sets ZF too), and getting
+      // that wrong is a miscompile rather than a missed optimization.
+      if (fusesWithNextBranch(instruction)) {
+        fusedCompare_ = &instruction;
+        break;
+      }
+      lowerCompare(instruction, /*isFloat=*/false);
+      break;
     case Opcode::FCmp: lowerCompare(instruction, /*isFloat=*/true); break;
 
     case Opcode::SIToFP: {
@@ -767,6 +795,29 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
       break;
 
     case Opcode::CondBr: {
+      if (fusedCompare_ == instruction.operand(0)) {
+        // The comparison just before this one left its flags set for us.
+        const MReg lhs = target_.scratchInt0();
+        const MReg rhs = target_.scratchInt1();
+        MReg left = MReg::None;
+        if (!regOf(fusedCompare_->operand(0), left)) {
+          left = lhs;
+          loadInt(fusedCompare_->operand(0), left);
+        }
+        MReg right = MReg::None;
+        if (!regOf(fusedCompare_->operand(1), right)) {
+          right = rhs;
+          loadInt(fusedCompare_->operand(1), right);
+        }
+        emit("cmpq", {MOperand::makeReg(right), MOperand::makeReg(left)},
+             "fused with the branch below");
+        emit(jccForInt(fusedCompare_->predicate()),
+             {MOperand::makeLabel(blockLabel(*instruction.successors()[0]))});
+        emit("jmp", {MOperand::makeLabel(blockLabel(*instruction.successors()[1]))});
+        fusedCompare_ = nullptr;
+        break;
+      }
+
       // Test the condition where it already is, when it is anywhere at all.
       MReg condition = MReg::None;
       if (!regOf(instruction.operand(0), condition)) {
@@ -792,6 +843,26 @@ void CodeGen::lowerInstruction(const ir::Instruction& instruction) {
 // Function and module
 // ---------------------------------------------------------------------------
 
+bool CodeGen::fusesWithNextBranch(const ir::Instruction& instruction) const {
+  if (instruction.opcode() != Opcode::ICmp || instruction.useCount() != 1) {
+    return false;
+  }
+  const ir::BasicBlock* block = instruction.parent();
+  if (block == nullptr) {
+    return false;
+  }
+  // It has to be the instruction immediately before the branch: anything in
+  // between could write the flags.
+  const auto& instructions = block->instructions();
+  if (instructions.size() < 2 ||
+      instructions[instructions.size() - 2].get() != &instruction) {
+    return false;
+  }
+  const ir::Instruction* branch = instructions.back().get();
+  return branch->opcode() == Opcode::CondBr && branch->operandCount() == 1 &&
+         branch->operand(0) == &instruction;
+}
+
 void CodeGen::lowerBlock(const ir::BasicBlock& block) {
   for (const auto& instruction : block.instructions()) {
     std::string provenance;
@@ -816,6 +887,7 @@ void CodeGen::lowerBlock(const ir::BasicBlock& block) {
 void CodeGen::lowerFunction(const ir::Function& function, MFunction& out) {
   irFunction_ = &function;
   function_ = &out;
+  fusedCompare_ = nullptr;
   out.name = target_.symbolName(function.name());
 
   assignSlots(function);
@@ -869,6 +941,12 @@ MModule CodeGen::run(const ir::Module& module, analysis::AnalysisManager& analys
 
     result.functions.emplace_back();
     lowerFunction(*function, result.functions.back());
+
+    // Layout last, once every instruction exists: it reads the jumps back to
+    // recover the CFG, so it has to run after they are all emitted.
+    const LayoutResult one = layoutBlocks(result.functions.back(), profileLayout_);
+    layout_.moved += one.moved;
+    layout_.jumpsRemoved += one.jumpsRemoved;
   }
 
   module_ = nullptr;

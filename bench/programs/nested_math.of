@@ -1,0 +1,17 @@
+// Nested loops of pure arithmetic: the shape unrolling is for. The inner loop
+// runs 400 iterations per entry, which no static heuristic knows and the
+// profile measures exactly.
+fn kernel(int rows, int cols) -> int {
+    int acc = 0;
+    int r = 0;
+    while (r < rows) {
+        int c = 0;
+        while (c < cols) {
+            acc = acc + r * c - (r + c);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return acc;
+}
+fn main() -> int { print_int(kernel(600000, 400)); return 0; }

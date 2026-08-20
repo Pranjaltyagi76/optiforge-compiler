@@ -24,6 +24,7 @@
 #include "optiforge/analysis/SSAVerifier.h"
 #include "optiforge/passes/Pass.h"
 #include "optiforge/transforms/Instrument.h"
+#include "optiforge/transforms/ProfileAnnotate.h"
 #include "optiforge/transforms/SSA.h"
 #include "optiforge/backend/CodeGen.h"
 #include "optiforge/backend/RegAlloc.h"
@@ -47,6 +48,7 @@ void anchorGVN();
 void anchorLICM();
 void anchorSimplifyCFG();
 void anchorInline();
+void anchorLoopUnroll();
 }  // namespace optiforge::transforms
 
 namespace {
@@ -58,6 +60,7 @@ void keepPassRegistrations() {
   transforms::anchorLICM();
   transforms::anchorSimplifyCFG();
   transforms::anchorInline();
+  transforms::anchorLoopUnroll();
 }
 
 
@@ -217,12 +220,17 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   //
   // Loaded before the pipeline runs, so a pass can ask for it. Nothing consumes
   // it yet; Phase 11 is what turns these numbers into decisions.
+  std::shared_ptr<profile::ProfileData> profileData;
   if (!opts.useProfile.empty()) {
-    auto data = std::make_shared<profile::ProfileData>(
+    profileData = std::make_shared<profile::ProfileData>(
         loadAndValidateProfile(opts, *module, diags));
     for (const auto& function : module->functions()) {
-      analyses.provide<analysis::ProfileAnalysis>(*function, data);
+      analyses.provide<analysis::ProfileAnalysis>(*function, profileData);
     }
+    // Counts onto the IR as well as into the analysis. The backend has no
+    // AnalysisManager to ask, and both register allocation and block layout
+    // need per-block frequencies.
+    transforms::annotateBlockCounts(*module, *profileData);
   }
 
   if (opts.optLevel > 0) {
@@ -240,6 +248,9 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
     pipeline.setPrintAfterAll(opts.printAfterAll);
     pipeline.setPrintAfter(opts.printAfter);
     pipeline.setVerifyEach(opts.verifyEach);
+    if (opts.pgoRemarks) {
+      pipeline.setRemarkStream(&std::cerr);
+    }
     pipeline.run(*module, analyses);
 
     // Module-level cleanup: inlining leaves the original behind, and no
@@ -295,6 +306,13 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
   // holds -- and the register allocator is about to ask for liveness.
   analyses.invalidateAll();
 
+  // Second pass over the counts. Blocks created since the first one -- split
+  // critical edges, preheaders, the copies unrolling made -- are matched by name
+  // where the profile knows them and keep what they inherited where it does not.
+  if (profileData != nullptr) {
+    transforms::annotateBlockCounts(*module, *profileData);
+  }
+
   // --- Where the output goes ---
   //
   // Computed before code generation rather than after, because an instrumented
@@ -331,7 +349,13 @@ ExitCode runCompilation(const Options& opts, SourceManager& sources, DiagnosticE
                                               : backend::RegAllocKind::Graph;
   backend::CodeGen codegen(backend::x86_64WindowsTarget(), allocator);
   codegen.setProfileLayout(std::move(profileLayout));
+  codegen.setProfileGuidedLayout(profileData != nullptr && profileData->isValid());
   const backend::MModule machine = codegen.run(*module, analyses);
+
+  if (opts.pgoRemarks && profileData != nullptr) {
+    std::cerr << "layout: " << codegen.layout().moved << " block(s) reordered, "
+              << codegen.layout().jumpsRemoved << " jump(s) became fall-through\n";
+  }
 
   if (opts.printRegAlloc) {
     for (const backend::RegisterAssignment& allocation : codegen.allocations()) {

@@ -176,8 +176,16 @@ private:
 
     // Use weights: every mention of a value in a block costs what that block
     // costs to run.
+    //
+    // A measured execution count when there is one, loop depth when there is
+    // not (PGO-08). Loop depth assumes every loop runs about ten times and
+    // every branch is taken half the time; a profile replaces both guesses with
+    // the number. A loop the compiler statically believes is hot but which ran
+    // twice stops stealing registers from the one that ran fifty million times.
     for (const auto& block : function_.blocks()) {
-      const double weight = weightForDepth(loops_.depthOf(block.get()));
+      const double weight = block->executionCount > 0
+                                ? static_cast<double>(block->executionCount)
+                                : weightForDepth(loops_.depthOf(block.get()));
       for (const auto& instruction : block->instructions()) {
         const std::size_t defined = unitOf(instruction.get());
         if (defined != kNoUnit) {
@@ -295,16 +303,23 @@ private:
         const std::size_t defined = unitOf(&instruction);
 
         if (defined != kNoUnit) {
-          // A copy's source and destination hold the same value at this point,
-          // so they do not interfere -- which is what makes them coalescable.
-          const std::size_t copySource =
-              instruction.opcode() == ir::Opcode::Copy && instruction.operandCount() == 1
-                  ? unitOf(instruction.operand(0))
-                  : kNoUnit;
+          // Everything live after this instruction interferes with what it
+          // defines -- including a copy's source.
+          //
+          // The textbook build step excludes the source of a move, on the
+          // grounds that the two hold the same value at that point. That is
+          // only sound when the source dies at the copy: if it is live
+          // *afterwards* the two are genuinely simultaneous, and the edge that
+          // would otherwise be recovered at the source's next definition never
+          // materializes here, because SSA destruction's root copy reads its own
+          // location and is treated as neither a definition nor a use.
+          //
+          // A source that does die at the copy is simply not in `live`, so the
+          // move is still coalescable and nothing is lost by dropping the
+          // exclusion. Found by the differential fuzzer, on a phi whose location
+          // was copied while still needed.
           for (std::size_t other : live) {
-            if (other != copySource) {
-              interfere(defined, other);
-            }
+            interfere(defined, other);
           }
           live.erase(defined);
         }

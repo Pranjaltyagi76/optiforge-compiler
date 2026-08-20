@@ -33,6 +33,7 @@ void anchorGVN();
 void anchorLICM();
 void anchorSimplifyCFG();
 void anchorInline();
+void anchorLoopUnroll();
 }  // namespace optiforge::transforms
 
 namespace {
@@ -47,6 +48,7 @@ struct KeepRegistrations {
     transforms::anchorLICM();
     transforms::anchorSimplifyCFG();
     transforms::anchorInline();
+    transforms::anchorLoopUnroll();
   }
 };
 const KeepRegistrations kKeep;

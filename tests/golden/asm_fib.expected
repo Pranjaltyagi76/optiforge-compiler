@@ -16,13 +16,9 @@ fib:
 	movq       %rcx, %r11                      # arg n
 	movq       %r11, -16(%rbp)                 # store
 	movq       -16(%rbp), %r11                 # %t0 = load
-	movq       $2, %r10                        # %t1 = icmp
-	cmpq       %r10, %r11
-	setl       %r11b                           # 8-bit form
-	movzbq     %r11b, %r11
-	testq      %r11, %r11                      # condbr
-	jne        .L_fib_if_then_1
-	jmp        .L_fib_if_end_2
+	movq       $2, %r10                        # condbr
+	cmpq       %r10, %r11                      # fused with the branch below
+	jge        .L_fib_if_end_2                 # inverted: hot side falls through
 .L_fib_if_then_1:
 	movq       -16(%rbp), %r11                 # %t2 = load
 	movq       %r11, %rax                      # ret

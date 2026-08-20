@@ -202,6 +202,13 @@ CONFIGS = [
     ("-O2", ["--profile"]),
 ]
 
+# PGO-11 and PGO-07. The profile-guided build is the only configuration that
+# runs the loop unroller, which rewrites SSA across a loop's exit edge -- the
+# transform in this compiler with the most ways to be subtly wrong. Random loop
+# shapes are what find those; hand-written tests cover the shapes someone
+# thought of.
+PGO_CONFIG = ("-O2", ["--use-profile="])
+
 
 def run(src, workdir, level, idx, extra=()):
     f = workdir / f"p{idx}.of"
@@ -222,16 +229,47 @@ def run(src, workdir, level, idx, extra=()):
         return ("TIMEOUT", -1, "")
     return ("OK", p.returncode, p.stdout)
 
+def run_pgo(src, workdir, idx):
+    """Recompiles against the profile the instrumented configuration just wrote.
+
+    The `-O2 --profile` entry in CONFIGS runs first and leaves its .prof beside
+    the executable, so this reuses it rather than building and running a second
+    instrumented binary. On Windows that also avoids relinking over an image the
+    loader has not finished releasing, which fails with a permission error that
+    looks alarmingly like a compiler bug.
+
+    Returns the same shape as `run`, so a divergence is reported exactly like
+    any other configuration.
+    """
+    level, _ = PGO_CONFIG
+    profile = workdir / f"p{idx}_O2profile.prof"
+    if not profile.exists():
+        return ("NO_PROFILE", -1, "")
+    return run(src, workdir, level, idx, [f"--use-profile={profile}"])
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="offuzz"))
     bad = 0
+    skipped = 0
     try:
         for i in range(SEED0, SEED0 + N):
             src = make_program(i)
             base = run(src, tmp, "-O0", i)
-            for level, extra in CONFIGS:
-                label = level + "".join(" " + a for a in extra)
-                result = run(src, tmp, level, i, extra)
+            if base[0] != "OK":
+                # Nothing to compare against. The generator can produce a
+                # program that loops forever; that is not a compiler bug, and
+                # every configuration would "fail" the same way.
+                skipped += 1
+                continue
+            configurations = [(level, extra) for level, extra in CONFIGS]
+            for level, extra in configurations + [PGO_CONFIG]:
+                if extra == ["--use-profile="]:
+                    label = "-O2 --use-profile"
+                    result = run_pgo(src, tmp, i)
+                else:
+                    label = level + "".join(" " + a for a in extra)
+                    result = run(src, tmp, level, i, extra)
                 if result != base:
                     bad += 1
                     print("=" * 70)
@@ -244,6 +282,7 @@ def main():
                 break
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print(f"done: {bad} mismatching programs")
+    print(f"done: {bad} mismatching programs, {skipped} skipped "
+          "(no working -O0 build to compare against)")
 
 main()

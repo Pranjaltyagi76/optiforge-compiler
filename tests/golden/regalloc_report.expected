@@ -18,15 +18,10 @@ swapper:
 	movq       %rcx, %rbx                      # arg n
 	movq       $2, %rdi                        # %t15 = copy
 	movq       $1, %rsi                        # %t16 = copy
-	jmp        .L_swapper_while_cond_1         # br
 .L_swapper_while_cond_1:
-	movq       $0, %r10                        # %t1 = icmp
-	cmpq       %r10, %rbx
-	setg       %r11b                           # 8-bit form
-	movzbq     %r11b, %r11
-	testq      %r11, %r11                      # condbr
-	jne        .L_swapper_while_body_2
-	jmp        .L_swapper_while_end_3
+	movq       $0, %r10                        # condbr
+	cmpq       %r10, %rbx                      # fused with the branch below
+	jle        .L_swapper_while_end_3          # inverted: hot side falls through
 .L_swapper_while_body_2:
 	movq       $1, %r10                        # %t6 = sub
 	subq       %r10, %rbx
@@ -62,15 +57,10 @@ rotate3:
 	movq       $3, %r12                        # %t20 = copy
 	movq       $2, %rdi                        # %t21 = copy
 	movq       $1, %rsi                        # %t22 = copy
-	jmp        .L_rotate3_while_cond_1         # br
 .L_rotate3_while_cond_1:
-	movq       $0, %r10                        # %t1 = icmp
-	cmpq       %r10, %rbx
-	setg       %r11b                           # 8-bit form
-	movzbq     %r11b, %r11
-	testq      %r11, %r11                      # condbr
-	jne        .L_rotate3_while_body_2
-	jmp        .L_rotate3_while_end_3
+	movq       $0, %r10                        # condbr
+	cmpq       %r10, %rbx                      # fused with the branch below
+	jle        .L_rotate3_while_end_3          # inverted: hot side falls through
 .L_rotate3_while_body_2:
 	movq       $1, %r10                        # %t7 = sub
 	subq       %r10, %rbx

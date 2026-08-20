@@ -1,0 +1,17 @@
+// A hot loop whose branch goes one way 999 times out of 1000. Nothing static
+// can know that; with the profile, block layout puts the common case on the
+// fall-through and sinks the rare arm out of the way.
+fn step(int n) -> int {
+    int acc = 0;
+    int i = 0;
+    while (i < n) {
+        if (i % 1000 == 0) {
+            acc = acc + i * 7 + 13;
+        } else {
+            acc = acc + 1;
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+fn main() -> int { print_int(step(320000000)); return 0; }

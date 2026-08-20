@@ -25,6 +25,21 @@ class Value;
 
 namespace optiforge::backend {
 
+/// What block layout did to one function, for --pgo-remarks and the metrics.
+struct LayoutResult {
+  std::size_t moved = 0;         ///< blocks that ended up somewhere new
+  std::size_t jumpsRemoved = 0;  ///< jumps that became fall-through
+};
+
+/// Orders a function's blocks and removes the jumps that ordering made
+/// unnecessary (PGO-09).
+///
+/// With a profile the hot path is laid out to fall through and zero-count blocks
+/// are sunk to the end. Without one the order is left alone -- but the
+/// fall-through cleanup still runs, because it is a straight win on every build
+/// and doing it only for profile-guided ones would flatter the comparison.
+LayoutResult layoutBlocks(MFunction& function, bool useProfile);
+
 /// Turns IR into machine instructions.
 ///
 /// One code generator, two allocation strategies (ADR-08):
@@ -64,6 +79,13 @@ public:
   /// table and the tests that would otherwise have to grep assembly.
   const std::vector<RegisterAssignment>& allocations() const { return allocations_; }
 
+  /// Lay blocks out by measured frequency rather than leaving them in IR order.
+  /// Off unless a profile was supplied; the fall-through cleanup runs either way.
+  void setProfileGuidedLayout(bool value) { profileLayout_ = value; }
+
+  /// Blocks moved and jumps removed across the whole module.
+  const LayoutResult& layout() const { return layout_; }
+
 private:
   void lowerFunction(const ir::Function& function, MFunction& out);
 
@@ -80,6 +102,9 @@ private:
   void lowerBinaryFloat(const ir::Instruction& instruction, const char* mnemonic);
   void lowerDivRem(const ir::Instruction& instruction, bool wantRemainder);
   void lowerCompare(const ir::Instruction& instruction, bool isFloat);
+  /// True when this comparison feeds nothing but the branch right after it, so
+  /// the flags it sets can be branched on directly.
+  bool fusesWithNextBranch(const ir::Instruction& instruction) const;
   void lowerCall(const ir::Instruction& instruction);
   void lowerReturn(const ir::Instruction& instruction);
 
@@ -135,6 +160,12 @@ private:
   std::vector<std::string> allocationErrors_;
   std::vector<RegisterAssignment> allocations_;
   ProfileLayout profile_;
+  /// An integer comparison whose setcc was skipped because the branch that
+  /// follows will read its flags instead. Null except across those two
+  /// instructions.
+  const ir::Instruction* fusedCompare_ = nullptr;
+  bool profileLayout_ = false;
+  LayoutResult layout_;
 };
 
 /// Renders a machine module as GNU assembler input (AT&T syntax).

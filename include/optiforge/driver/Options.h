@@ -81,6 +81,8 @@ struct Options {
   std::string profileReport;
   /// Cumulative share of executions that defines "hot" (PGO-04).
   double hotThreshold = 80.0;
+  /// Explain every profile-guided decision on stderr (PGO-13).
+  bool pgoRemarks = false;
   std::string printAfter;
   std::vector<std::string> disabledPasses;
   bool showHelp = false;

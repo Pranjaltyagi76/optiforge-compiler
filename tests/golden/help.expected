@@ -23,6 +23,7 @@ Profiling:
   --use-profile=<file> Compile against a profile collected earlier
   --profile-report=<f> Print a hot-path report for <f> and exit
   --hot-threshold=<%>  Cumulative share that defines hot (default: 80)
+  --pgo-remarks        Explain every profile-guided decision
 
 Diagnostics:
   -Werror              Treat warnings as errors

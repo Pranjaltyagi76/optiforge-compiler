@@ -2,6 +2,7 @@ add_library(of_backend STATIC
   MachineIR.cpp
   CodeGen.cpp
   RegAlloc.cpp
+  Layout.cpp
   AsmPrinter.cpp)
 
 # The backend sees IR and the analyses, and never of_frontend

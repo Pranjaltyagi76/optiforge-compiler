@@ -407,16 +407,55 @@ executed. The report on it is checked in as `tests/golden/profile_report.expecte
 ### Phase 11 — Profile-Guided Optimization ⭐ *The defining feature*
 **Goal:** The optimizer changes its decisions based on measured behaviour.
 
-- [ ] `ProfileData` wired into the `AnalysisManager` and queryable by any pass.
-- [ ] **PGO inlining:** raise the size budget for hot call sites, refuse to inline cold ones.
-- [ ] **PGO loop unrolling:** unroll only hot loops; choose the factor from measured trip counts.
-- [ ] **PGO LICM aggressiveness:** spend more compile effort on hot loops.
-- [ ] **Profile-guided register allocation:** spill cost weighted by real execution counts instead of static loop depth.
-- [ ] **Basic block layout / branch reordering:** lay out the likely path to fall through; sink cold blocks to the end of the function.
-- [ ] **Cold-code size mode:** minimal optimization on cold paths.
-- [ ] Every PGO pass must have a documented fallback for when no profile exists.
+- [x] `ProfileData` queryable by any pass through `getCached<ProfileAnalysis>`.
+      **A supplied profile is not invalidated when the IR changes**, unlike every
+      derived analysis: nothing a pass does can change what the program did when
+      it ran. Before that distinction existed the first pass to report a change
+      threw the profile away and every decision after it silently took the
+      no-profile path while appearing to work.
+- [x] **PGO inlining:** budget 12 with no profile, 250 at a hot call site, and a
+      cold call site is not inlined at any size. Honest limit: the inliner still
+      only handles single-block callees, so the *block count* restriction binds
+      long before the budget does. Multi-block inlining is recorded as open.
+- [x] **PGO loop unrolling**, and it does nothing at all without a profile —
+      which is what Phase 7 deferred static unrolling for. Every copy re-tests
+      the exit condition, so the measured trip count being an *average* rather
+      than a bound costs code size and never correctness.
+- [ ] **PGO LICM aggressiveness.** Not implemented, and on reflection not worth
+      implementing: LICM here is already exhaustive rather than budgeted, so
+      "spend more effort on hot loops" has no effort left to spend. Recorded as
+      dropped rather than left looking undone.
+- [x] **Profile-guided register allocation:** spill cost from measured block
+      executions, falling back to 10^loopDepth when there is no profile.
+- [x] **Basic block layout:** greedy hot chains, cold blocks sunk, conditions
+      inverted so the hot side falls through.
+- [x] **Cold-code size mode:** a cold function gets the `-O1` pipeline, derived
+      from `pipelineFor(1)` rather than a second hand-maintained list.
+- [x] `--pgo-remarks` explains every decision, including the ones *not* taken.
+- [x] Every pass's no-profile behaviour is its normal behaviour, and is what the
+      whole non-PGO test suite exercises.
+
+**Status: COMPLETE** (verified: 379 unit assertions, 45 golden cases, 48
+end-to-end runs at three levels plus 32 through `--regalloc=naive`, 5 profile
+programs across 4 profile states each, and a differential fuzzer that now
+includes a full profile round-trip. Clean -Werror build in Debug and Release.
+Metric PGO-14 recorded in
+metrics/results/2026-08-19-phase11-pgo-speedup.md.)
 
 **Exit criteria:** ⭐ The North Star sentence in §1 is demonstrably true, with numbers.
+
+**Demonstrated.** `bench/programs/nested_math.of` compiled with
+`--use-profile` is **5.5% faster** than the same source at `-O2`, with identical
+output, against a 1.4% noise floor and reproduced an hour later. The mechanism
+was predicted before it was measured: the profile puts the inner loop's trip
+count at 400, the unroller replicates it eight times, and 7 of every 8 back-edge
+jumps disappear — 5.8% fewer instructions per iteration by arithmetic, 5.5%
+measured.
+
+Two of five programs beat `-O2` above their own noise. The other three are
+explained rather than excused in §4 of the metrics write-up, and one of them
+(`branchy.of`) is there because PGO first made it *slower* and the unroller now
+refuses the shape that did it.
 
 ---
 
@@ -467,7 +506,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | M4 | "It optimizes" | P7 | Same output, roughly 30–50% fewer IR instructions at `-O2` |
 | M5 | **"It allocates registers"** | P8 | ✅ **REACHED** — `sum.of`'s loop body is three instructions and no memory access, down from twelve and eight |
 | M6 | **"It profiles"** | P9–P10 | ✅ **REACHED** — `.prof` written and hand-verified, and the report names the hot function and hot loop of a benchmark built to have one of each |
-| M7 | ⭐ **"PGO beats -O2"** | P11–P12 | Benchmark table with measured speedup |
+| M7 | ⭐ **"PGO beats -O2"** | P11–P12 | ✅ **REACHED for P11** — `nested_math.of` is 5.5% faster under profile guidance, predicted then measured; the full benchmark table is P12 |
 
 ---
 
@@ -484,7 +523,7 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 | ~~Register allocator miscompiles under pressure~~ **RETIRED 2026-08-19** | — | — | Mitigated as planned: `--regalloc=naive` is kept and the whole end-to-end suite runs through it, `tests/e2e/register_pressure.of` holds 22 values live against 8 registers, and every compilation verifies the assignment against independently recomputed live ranges rather than trusting it. |
 | Profile IDs unstable across recompiles, so PGO silently no-ops | High | High | Deterministic ID scheme and a source hash in the header, both landed in Phase 9. **One known gap:** instrumentation splits critical edges, so an instrumented build contains `crit.edge.N` blocks an ordinary build does not. The BRANCH and FUNCTION records that Phase 11 actually consumes name blocks that exist in both; the extra BLOCK records simply will not match, and Phase 10's match rate must not count them as staleness. |
 | Instrumentation perturbs the behaviour it measures | Medium | Medium | Instrument late in the pipeline; measure and document overhead; prefer edge counters over block counters where equivalent |
-| PGO shows no measurable win | Medium | Medium | Design benchmarks with genuinely biased branches and hot loops; if a pass shows no win, report that honestly — a negative result with analysis is still a result |
+| PGO shows no measurable win | Medium | **Partly realized** | Mitigated as planned. Two of five benchmarks win; three show nothing and each is explained. Block layout in particular is correct, visibly better, and worth 0.4% — a function that fits in L1 gains nothing from reordering, exactly as System_design.md §16.5 predicted. Reported rather than quietly dropped. |
 | Debugging generated assembly consumes all available time | Medium | High | Invest early in `--emit=asm` readability, IR-to-source line comments, and a small assembly test harness |
 
 ---

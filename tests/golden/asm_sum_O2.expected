@@ -18,14 +18,9 @@ sum:
 	movq       %rcx, %rdi                      # arg n
 	movq       $0, %r11                        # %t11 = copy
 	movq       $0, %rbx                        # %t12 = copy
-	jmp        .L_sum_while_cond_1             # br
 .L_sum_while_cond_1:
-	cmpq       %rdi, %r11                      # %t2 = icmp
-	setl       %sil                            # 8-bit form
-	movzbq     %sil, %rsi
-	testq      %rsi, %rsi                      # condbr
-	jne        .L_sum_while_body_2
-	jmp        .L_sum_while_end_3
+	cmpq       %rdi, %r11                      # condbr  fused with the branch below
+	jge        .L_sum_while_end_3              # inverted: hot side falls through
 .L_sum_while_body_2:
 	addq       %r11, %rbx                      # %t5 = add
 	movq       $1, %r10                        # %t7 = add

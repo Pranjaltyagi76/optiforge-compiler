@@ -270,12 +270,41 @@ TEST("a slot is addressed directly rather than through its computed address") {
   CHECK(!contains(assembly, "leaq"));
 }
 
-TEST("conditional branches test the condition and take both edges") {
+TEST("a comparison that only feeds a branch is fused with it") {
+  // `a > 0` produces an i1 nothing else reads, so materializing it would mean
+  // setcc, movzbq and testq before the jump could look at it. Branching on the
+  // comparison's own flags removes all three, which on a tight loop is a third
+  // of the work.
   const std::string assembly =
       assemblyFor("fn f(int a) -> int { if (a > 0) { return 1; } return 0; }");
-  CHECK(contains(assembly, "testq"));
-  CHECK(contains(assembly, "jne"));
-  CHECK(contains(assembly, "jmp"));
+  CHECK(contains(assembly, "cmpq"));
+  CHECK(contains(assembly, "fused with the branch"));
+  CHECK(!contains(assembly, "setg"));
+  CHECK(!contains(assembly, "movzbq"));
+  CHECK(!contains(assembly, "testq"));
+}
+
+TEST("a conditional branch falls through to whichever side comes next") {
+  // Emitted as `jcc taken; jmp not-taken`, then laid out. Whichever of the two
+  // lands next costs nothing to reach, so its jump goes -- and when that is the
+  // taken side, the condition is inverted to make it possible. Both arms are
+  // still reachable; what disappears is a jump, not an edge.
+  const std::string assembly =
+      assemblyFor("fn f(int a) -> int { if (a > 0) { return 1; } return 0; }");
+  CHECK(contains(assembly, "inverted") || contains(assembly, "jmp"));
+
+  // Both destinations still exist as labels, whatever order they ended up in.
+  CHECK(contains(assembly, "if_then_1"));
+  CHECK(contains(assembly, "if_end_2"));
+}
+
+TEST("a comparison read by more than the branch is still materialized") {
+  // Fusing would leave the second reader with nothing to read.
+  const std::string assembly = assemblyFor(
+      "fn f(int a) -> int { bool c = a > 0; if (c) { return 1; } "
+      "if (c) { return 2; } return 0; }");
+  CHECK(contains(assembly, "setg") || contains(assembly, "setl") ||
+        contains(assembly, "testq"));
 }
 
 TEST("block labels are unique per function") {

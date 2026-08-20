@@ -2,6 +2,7 @@
 
 #include <iosfwd>
 #include <map>
+#include <ostream>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -39,6 +40,20 @@ public:
   /// did not happen costs an iteration; failing to report one that did is a
   /// correctness bug.
   virtual bool run(ir::Function& function, analysis::AnalysisManager& manager) = 0;
+
+  /// Where `--pgo-remarks` output goes, or null when it was not asked for.
+  ///
+  /// Set by the pass manager before each run rather than reached through a
+  /// global: a profile-guided decision that cannot be explained is a decision
+  /// nobody can check, and requirement PGO-13 asks for every one of them to be
+  /// explainable. A stream per pass keeps that honest without a singleton.
+  void setRemarkStream(std::ostream* stream) { remarks_ = stream; }
+
+protected:
+  std::ostream* remarks() const { return remarks_; }
+
+private:
+  std::ostream* remarks_ = nullptr;
 };
 
 using PassFactory = std::unique_ptr<Pass> (*)();
@@ -93,6 +108,8 @@ public:
   void setPrintStream(std::ostream* stream) { printStream_ = stream; }
   /// Run the IR verifier after every pass, naming the pass that broke it.
   void setVerifyEach(bool value) { verifyEach_ = value; }
+  /// Where profile-guided decisions explain themselves (PGO-13). Null disables.
+  void setRemarkStream(std::ostream* stream) { remarkStream_ = stream; }
 
   /// Sweeps taken before the pipeline stopped changing. Metric O-10 caps this
   /// so two passes undoing each other cannot loop forever.
@@ -106,6 +123,7 @@ private:
   std::vector<PassStatistics> statistics_;
   std::string printAfter_;
   std::ostream* printStream_ = nullptr;
+  std::ostream* remarkStream_ = nullptr;
   bool printAfterAll_ = false;
   bool verifyEach_ = false;
   unsigned iterations_ = 0;

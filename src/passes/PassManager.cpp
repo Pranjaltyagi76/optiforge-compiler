@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <iostream>
+#include <string_view>
 #include <utility>
 
 #include "optiforge/analysis/AnalysisManager.h"
+#include "optiforge/analysis/ProfileAnalysis.h"
 #include "optiforge/ir/Function.h"
 #include "optiforge/ir/Module.h"
 #include "optiforge/ir/Printer.h"
@@ -52,6 +54,34 @@ void PassManager::add(std::unique_ptr<Pass> pass) {
   passes_.push_back(std::move(pass));
 }
 
+namespace {
+
+/// Passes a cold function still gets: everything the -O1 pipeline runs.
+///
+/// The list is the -O1 pipeline rather than a second hand-maintained one, so
+/// "cold code is compiled at -O1" stays true by construction rather than by
+/// someone remembering to update two places.
+bool runsOnColdCode(std::string_view name) {
+  for (const std::string& pass : pipelineFor(1)) {
+    if (pass == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// True when the profile says this function is cold. False whenever there is no
+/// profile, which is the fallback every profile-guided decision must have: no
+/// measurement means no reason to treat the function differently.
+bool isCold(const ir::Function& function, analysis::AnalysisManager& manager) {
+  const profile::ProfileData* profile =
+      manager.getCached<analysis::ProfileAnalysis>(function);
+  return profile != nullptr && profile->isValid() &&
+         profile->functionHeat(function.name()) == profile::Heat::Cold;
+}
+
+}  // namespace
+
 bool PassManager::run(ir::Module& module, analysis::AnalysisManager& manager) {
   std::ostream& out = printStream_ != nullptr ? *printStream_ : std::cerr;
   bool changedOverall = false;
@@ -67,10 +97,20 @@ bool PassManager::run(ir::Module& module, analysis::AnalysisManager& manager) {
         continue;
       }
 
+      // Cold functions are compiled at an effective -O1 (PGO-10). The gain is
+      // instruction-cache pressure rather than direct execution time, and code
+      // that never runs should not be spending compile time or code size on
+      // unrolling and inlining.
+      const bool cold = isCold(*function, manager);
+
       for (std::size_t i = 0; i < passes_.size(); ++i) {
         Pass& pass = *passes_[i];
+        if (cold && !runsOnColdCode(pass.name())) {
+          continue;
+        }
         ++statistics_[i].runs;
 
+        pass.setRemarkStream(remarkStream_);
         const bool changed = pass.run(*function, manager);
         if (!changed) {
           continue;
@@ -146,7 +186,15 @@ std::vector<std::string> pipelineFor(int optimizationLevel) {
       "constant-folding",
       "sccp",
       "gvn",
+      // Unrolling comes after LICM so the loop it replicates has already had
+      // everything invariant lifted out of it -- copying that work `factor`
+      // times would be exactly the wrong thing. It does nothing at all without
+      // a profile, so this addition leaves the -O2 pipeline unchanged for an
+      // ordinary build.
       "licm",
+      "loop-unroll",
+      "constant-folding",
+      "gvn",
       "strength-reduction",
       "dce",
       "simplify-cfg",

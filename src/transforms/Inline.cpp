@@ -1,13 +1,17 @@
 #include <memory>
+#include <ostream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "optiforge/analysis/AnalysisManager.h"
+#include "optiforge/analysis/ProfileAnalysis.h"
 #include "optiforge/ir/BasicBlock.h"
 #include "optiforge/ir/Function.h"
 #include "optiforge/ir/Instruction.h"
 #include "optiforge/ir/Module.h"
 #include "optiforge/passes/Pass.h"
+#include "optiforge/profile/Profile.h"
 
 namespace optiforge::transforms {
 
@@ -16,12 +20,19 @@ namespace {
 using passes::Pass;
 using passes::PassRegistration;
 
-/// Largest callee body worth inlining, in instructions.
+/// Largest callee body worth inlining, in instructions, with no profile to go on.
 ///
-/// A static guess, and a conservative one. Phase 11 replaces it with a
-/// profile-derived budget that is generous at hot call sites and zero at cold
-/// ones (requirement PGO-06), which is the whole point of the exercise.
+/// A static guess, and a conservative one, because without measurement every
+/// inline is a bet that the call site is hot.
 constexpr std::size_t kSizeBudget = 12;
+
+/// The same budget once the guess is replaced by a measurement (PGO-06).
+///
+/// A hot call site can afford a much larger callee: the code growth is paid
+/// once and the call overhead is saved every time round. A cold one gets zero,
+/// which is not a smaller budget but a different decision -- code that never
+/// runs should not be duplicated at all.
+constexpr std::size_t kHotSizeBudget = 250;
 
 /// Inlines small callees.
 ///
@@ -42,17 +53,52 @@ public:
     return "inline small single-block callees";
   }
 
-  bool run(ir::Function& function, analysis::AnalysisManager&) override {
+  bool run(ir::Function& function, analysis::AnalysisManager& manager) override {
+    const profile::ProfileData* profile =
+        manager.getCached<analysis::ProfileAnalysis>(function);
+    const bool measured = profile != nullptr && profile->isValid();
+
     bool changed = false;
 
     // Collect first: inlining mutates the block being walked.
     std::vector<ir::Instruction*> calls;
     for (const auto& block : function.blocks()) {
-      for (const auto& instruction : block->instructions()) {
-        if (instruction->opcode() == ir::Opcode::Call &&
-            shouldInline(function, *instruction)) {
-          calls.push_back(instruction.get());
+      const profile::Heat heat =
+          measured ? profile->blockHeat(function.name(), block->label())
+                   : profile::Heat::Unknown;
+
+      // A cold call site is not inlined at any size. Without a profile every
+      // site is Unknown, which takes the static budget -- the pass's normal
+      // behaviour, not a degradation path.
+      if (heat == profile::Heat::Cold) {
+        for (const auto& instruction : block->instructions()) {
+          if (instruction->opcode() == ir::Opcode::Call &&
+              instruction->callee() != nullptr &&
+              !instruction->callee()->isDeclaration()) {
+            remark(function, block->label(), "cold call site to @" +
+                                                 instruction->callee()->name() +
+                                                 "; not inlined");
+          }
         }
+        continue;
+      }
+
+      const std::size_t budget =
+          heat == profile::Heat::Hot ? kHotSizeBudget : kSizeBudget;
+
+      for (const auto& instruction : block->instructions()) {
+        if (instruction->opcode() != ir::Opcode::Call) {
+          continue;
+        }
+        if (!shouldInline(function, *instruction, budget)) {
+          continue;
+        }
+        if (heat == profile::Heat::Hot && instruction->callee() != nullptr) {
+          remark(function, block->label(),
+                 "hot call site to @" + instruction->callee()->name() +
+                     "; budget raised to " + std::to_string(budget));
+        }
+        calls.push_back(instruction.get());
       }
     }
 
@@ -64,7 +110,16 @@ public:
   }
 
 private:
-  static bool shouldInline(const ir::Function& caller, const ir::Instruction& call) {
+  void remark(const ir::Function& function, const std::string& block,
+              const std::string& what) {
+    if (remarks() != nullptr) {
+      *remarks() << "inline: @" << function.name() << ":" << block << ": " << what
+                 << "\n";
+    }
+  }
+
+  static bool shouldInline(const ir::Function& caller, const ir::Instruction& call,
+                           std::size_t budget) {
     const ir::Function* callee = call.callee();
     if (callee == nullptr || callee->isDeclaration()) {
       return false;  // a runtime builtin has no body to inline
@@ -84,7 +139,7 @@ private:
     if (terminator == nullptr || terminator->opcode() != ir::Opcode::Ret) {
       return false;
     }
-    if (body.instructions().size() > kSizeBudget) {
+    if (body.instructions().size() > budget) {
       return false;
     }
 

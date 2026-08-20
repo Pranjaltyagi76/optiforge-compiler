@@ -204,6 +204,11 @@ bool parseOptions(int argc, const char* const* argv, Options& out, std::ostream&
       continue;
     }
 
+    if (arg == "--pgo-remarks") {
+      out.pgoRemarks = true;
+      continue;
+    }
+
     if (arg == "--print-regalloc") {
       out.printRegAlloc = true;
       continue;
@@ -276,6 +281,7 @@ void printHelp(std::ostream& out) {
          "  --use-profile=<file> Compile against a profile collected earlier\n"
          "  --profile-report=<f> Print a hot-path report for <f> and exit\n"
          "  --hot-threshold=<%>  Cumulative share that defines hot (default: 80)\n"
+         "  --pgo-remarks        Explain every profile-guided decision\n"
          "\n"
          "Diagnostics:\n"
          "  -Werror              Treat warnings as errors\n"

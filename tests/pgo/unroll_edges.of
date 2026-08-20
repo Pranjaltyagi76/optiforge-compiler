@@ -1,0 +1,44 @@
+// Unrolling at the boundaries.
+//
+// The unroller replicates the body eight times and re-tests the condition
+// between each copy, so a loop can leave from any of them. These trip counts
+// are chosen to land on every one of those exits: none, one, one short of the
+// factor, exactly the factor, and one past it. If the re-test or the merge phi
+// is wrong, one of these numbers comes out wrong and the others do not.
+//
+// The loop has to run often enough to be classified hot, or the unroller
+// correctly leaves it alone and this tests nothing -- hence the outer repeat.
+//
+// LEVEL: -O2
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 0
+// EXPECT-OUTPUT: 1
+// EXPECT-OUTPUT: 21
+// EXPECT-OUTPUT: 28
+// EXPECT-OUTPUT: 36
+// EXPECT-OUTPUT: 45
+// EXPECT-OUTPUT: 4950
+// EXPECT-PROF: FUNCTION triangle 2007
+fn triangle(int n) -> int {
+    int total = 0;
+    int i = 0;
+    while (i < n) { total = total + i; i = i + 1; }
+    return total;
+}
+
+fn main() -> int {
+    // Warm the loop up so the profile calls it hot.
+    int warm = 0;
+    int r = 0;
+    while (r < 2000) { warm = warm + triangle(100); r = r + 1; }
+
+    print_int(triangle(-5));
+    print_int(triangle(0));
+    print_int(triangle(2));
+    print_int(triangle(7));
+    print_int(triangle(8));
+    print_int(triangle(9));
+    print_int(triangle(10));
+    print_int(warm / 2000);
+    return 0;
+}

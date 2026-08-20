@@ -510,5 +510,5 @@ Every one has a working default. None is required for normal use.
 | 8 | ✅ `--regalloc=naive\|graph` wired through the driver, defaulting to graph; `--print-regalloc` reports what the allocator did |
 | 9 | ✅ `libofprof` builds and installs beside `libofrt`; linked only for `--profile` and with `--whole-archive`, since it works through a constructor and nothing references it. Path from `--profile-out=`, overridable at run time by `$OPTIFORGE_PROFILE_OUT` |
 | 10 | ✅ `--profile-report=<file>` is a mode of its own, needing no input program; `--use-profile=` and `--hot-threshold=` wired through the driver |
-| 11 | Driver enforces matching `-O` levels between instrumented and PGO builds |
+| 11 | ✅ `--use-profile=`, `--hot-threshold=` and `--pgo-remarks` wired through; a profile whose `-O` level differs from the build warns that block names will not line up |
 | 12 | Benchmark harness records full machine specifications; results committed |
