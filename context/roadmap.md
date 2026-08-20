@@ -606,5 +606,5 @@ P0 ──> P1 ──> P2 ──> P3 ──> P4 ⭐ (first executable)
 - [x] All Phase 0–12 exit criteria met. **NFR-10's ≥10%-on-three target is separately missed** — see Phase 12 above; the exit criteria and that target are different bars.
 - [x] Test suite green: lexer, parser, sema, IR, analysis, opt, codegen, end-to-end, PGO — 384 unit assertions, 46 golden cases, 5 CTest suites.
 - [x] Benchmark results committed with machine specifications — four files in `metrics/results/` dated 2026-08-20, `metrics/machines/windows-mingw.md` complete with a measured noise floor.
-- [ ] `docs/` explains: the language, the IR, the `.prof` format, how to add a new pass, **how to add a new target** — the last is still missing.
+- [x] `docs/` explains: the language, the IR, the `.prof` format, how to add a new pass, and how to add a new target (`docs/adding-a-target.md`).
 - [x] A written report answering: *what did profile guidance actually buy, and why?* — `metrics/reports/phase-12-evaluation.md` §0, with the evidence in `metrics/results/2026-08-20-pgo-attribution.md`.
