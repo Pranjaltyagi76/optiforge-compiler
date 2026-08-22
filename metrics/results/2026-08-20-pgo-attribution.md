@@ -74,6 +74,32 @@ Bold entries are the ones outside the noise floor.
   it is now tested, and the effect is −0.1%.
 - **Profile-weighted spill costs** register once, negatively (see below).
 
+> ### ⚠ Corrected in Phase 13: the `nbody` regalloc figure was noise
+>
+> The −1.5% attributed to `regalloc` on `nbody.of` below **is not a real
+> effect**, and the paragraph after this box is wrong. Phase 13 checked the
+> emitted assembly rather than the clock, and found that
+> `-O2 --use-profile` and `-O2 --use-profile --disable-pgo=regalloc` produce
+> **byte-identical output for `nbody.of`** — same 38 spills, same 89 coloured
+> units, same callee-saved set. The attribution run was timing two identical
+> binaries and reporting the difference as a decision's contribution.
+>
+> Worse for the metric than one bad row: across the ten-program corpus,
+> profile-weighted spill costs change the emitted code on **exactly one
+> program**, `loop_kernel.of`, and are a complete no-op on the other nine. On
+> that one they produce **one more spill** than loop depth would (8 against 7).
+>
+> So G-08's target of "> 0 improvement" is not met, and the honest reading is
+> that this decision does not currently earn its place. The mechanism is still
+> sound in principle — a loop the compiler believes is hot but which ran twice
+> should not steal registers — and ten synthetic programs is not grounds to
+> delete it. But it needs a case where it demonstrably helps, or it should go.
+>
+> The general lesson is the one this whole page exists for, turned on itself:
+> **an attribution figure smaller than the noise floor is not a small effect, it
+> is not an effect.** Where a decision's contribution is in doubt, diff the
+> assembly first — it costs nothing and it cannot be wrong.
+
 **The one place register allocation shows up, it hurts.** `nbody.of` loses 1.5
 points to `regalloc`. Its `simulate` is a single loop holding 35 values live
 against 10 allocatable XMM registers, so the profile's honest answer — every block in this
@@ -112,5 +138,6 @@ distributing it across the decisions.
 |---|---|---|
 | Unroller cost model — the −6.8 on `loop_kernel.of` is the single largest correctable loss in the project | G-07 | ☐ open |
 | Multi-block inlining, so the PGO inline budget has something to apply to | G-06 | ☑ **Done in Phase 13.** The inliner now clones callees with branches, phis, loops and several returns, merging the returns with a phi at the call site. `branchy.of`'s `classify` and `opt_pipeline`'s `work` -- a callee containing a whole loop -- now inline. Still refused: a callee containing a call (so a call-graph cycle cannot expand forever) or an alloca. |
-| Profile-weighted spill costs need a tie-break for functions that are one flat loop | G-08 | ☐ open |
+| ~~Profile-weighted spill costs need a tie-break for functions that are one flat loop~~ | G-08 | ☒ **Withdrawn in Phase 13 — false premise.** There was no `nbody` effect to fix: the two builds are byte-identical. Replaced by the row below. |
+| G-08 changes the emitted code on 1 of 10 programs and adds a spill there. Find a case where profile-weighted spill costs demonstrably help, or drop the decision | G-08 | ☐ open |
 | Cold-code size mode is measured at −0.1%; keep or drop it on evidence rather than leaving it unexamined | G-10 | ☐ open |
