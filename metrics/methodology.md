@@ -105,6 +105,45 @@ Report a difference as **real** only if:
 
 Condition 3 catches the case where something changed on the machine mid-session, which the first two cannot detect.
 
+### ★ The startup offset, and what it does to a percentage
+
+Every timing this project reports is a **whole process**: spawn, load, run,
+exit. On `windows-mingw` that carries a fixed cost measured at **61 ms
+minimum, 72 ms median** over thirty runs of a program whose entire body is one
+`print_int`.
+
+That constant is added to both sides of every comparison, so it **cannot
+manufacture a speedup** — the difference between two configurations is
+unaffected by a term they share. What it does do is **dilute the percentage**,
+and always in the same direction:
+
+```
+reported speedup =  (b + s) / (t + s) - 1        s = startup, shared
+actual speedup   =   b / t - 1                   b, t = the work itself
+```
+
+Because `s > 0`, the reported figure is always **smaller** than the speedup on
+the work. `nested_math.of` is the worked example: 175.2 ms against 166.6 ms is
+the reported +5.2%, but subtracting a 61 ms floor leaves 114 ms against
+106 ms — **+7.9% on the work the compiler actually generated**.
+
+Three rules follow:
+
+1. **Report the whole-process number**, which is what the results files do. It
+   is the honest measure of what a user experiences, and subtracting an
+   estimated constant from a published figure invites arguing about the
+   constant.
+2. **Say the offset exists** wherever a percentage is interpreted, so nobody
+   reads a small gain as a small effect.
+3. **Keep benchmarks well above it.** The 200 ms floor in §2 exists partly for
+   this reason: at 200 ms the startup is a third of the measurement and dilutes
+   a gain by roughly a third; at 80 ms it is most of the measurement and
+   dilutes almost everything away.
+
+This is *not* a reason to switch to an in-process timer. Doing so would mean
+timing a region chosen by the person reporting the result, which trades a known
+constant bias for an unknown selective one.
+
 ### What not to do
 
 - Do not report a speedup from a single run.

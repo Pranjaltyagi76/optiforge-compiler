@@ -53,6 +53,16 @@ Per-program same-configuration difference:
 
 **Nothing below 1.0% is reportable as a result on this machine.**
 
+### Process startup offset
+
+**61 ms minimum, 72 ms median**, measured 2026-08-21 over thirty runs of a
+program whose whole body is one `print_int`. Every timing this project reports
+includes it.
+
+It is shared by both sides of any comparison, so it cannot create a speedup —
+but it **dilutes every percentage**, always downward. See `methodology.md` §4.
+Benchmarks are sized well above it for this reason.
+
 ### Two caveats that belong with the number
 
 **The power plan is Balanced, not High Performance.** `methodology.md` §3.1
