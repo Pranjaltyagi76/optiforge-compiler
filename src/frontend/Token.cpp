@@ -26,6 +26,12 @@ std::string_view toString(TokenKind kind) {
       return "kw_else";
     case TokenKind::KwWhile:
       return "kw_while";
+    case TokenKind::KwFor:
+      return "kw_for";
+    case TokenKind::KwBreak:
+      return "kw_break";
+    case TokenKind::KwContinue:
+      return "kw_continue";
     case TokenKind::KwReturn:
       return "kw_return";
     case TokenKind::KwTrue:
@@ -112,6 +118,12 @@ std::string_view describe(TokenKind kind) {
       return "'else'";
     case TokenKind::KwWhile:
       return "'while'";
+    case TokenKind::KwFor:
+      return "'for'";
+    case TokenKind::KwBreak:
+      return "'break'";
+    case TokenKind::KwContinue:
+      return "'continue'";
     case TokenKind::KwReturn:
       return "'return'";
     case TokenKind::KwTrue:

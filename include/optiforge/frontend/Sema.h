@@ -47,6 +47,11 @@ private:
   void analyzeAssign(AssignStmt& assign);
   void analyzeIf(IfStmt& stmt);
   void analyzeWhile(WhileStmt& stmt);
+  void analyzeFor(ForStmt& stmt);
+  /// How many loops enclose the statement being analyzed. `break` and
+  /// `continue` outside every loop have nothing to jump to, and the
+  /// frontend is the only place that can say so.
+  int loopDepth_ = 0;
   void analyzeReturn(ReturnStmt& stmt);
 
   /// Analyzes `expr`, records its type on the node, and returns that type.

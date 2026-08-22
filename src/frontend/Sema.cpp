@@ -230,6 +230,19 @@ void Sema::analyzeStmt(Stmt& stmt) {
     case Node::Kind::WhileStmt:
       analyzeWhile(static_cast<WhileStmt&>(stmt));
       break;
+    case Node::Kind::ForStmt:
+      analyzeFor(static_cast<ForStmt&>(stmt));
+      break;
+    case Node::Kind::BreakStmt:
+      if (loopDepth_ == 0) {
+        error(stmt.range(), "'break' outside a loop");
+      }
+      break;
+    case Node::Kind::ContinueStmt:
+      if (loopDepth_ == 0) {
+        error(stmt.range(), "'continue' outside a loop");
+      }
+      break;
     case Node::Kind::ReturnStmt:
       analyzeReturn(static_cast<ReturnStmt&>(stmt));
       break;
@@ -396,9 +409,37 @@ void Sema::analyzeWhile(WhileStmt& stmt) {
   if (Expr* cond = stmt.cond()) {
     requireBoolCondition(*cond, "while");
   }
+  ++loopDepth_;
   if (Block* body = stmt.body()) {
     analyzeBlock(*body, /*ownScope=*/true);
   }
+  --loopDepth_;
+}
+
+void Sema::analyzeFor(ForStmt& stmt) {
+  // A scope of its own, so `for (int i = ...)` declares `i` for the loop and
+  // not for everything after it -- and so two `for`s in a row may both use `i`.
+  symbols_.pushScope();
+
+  if (Stmt* init = stmt.init()) {
+    analyzeStmt(*init);
+  }
+  if (Expr* cond = stmt.cond()) {
+    requireBoolCondition(*cond, "for");
+  }
+  // The step is analyzed before the body only because it must be in scope for
+  // both; it runs after the body at execution time, which is IRGen's business.
+  if (Stmt* step = stmt.step()) {
+    analyzeStmt(*step);
+  }
+
+  ++loopDepth_;
+  if (Block* body = stmt.body()) {
+    analyzeBlock(*body, /*ownScope=*/true);
+  }
+  --loopDepth_;
+
+  symbols_.popScope();
 }
 
 void Sema::analyzeReturn(ReturnStmt& stmt) {
@@ -675,8 +716,14 @@ bool Sema::returnsOnAllPaths(const Stmt* stmt) {
     }
 
     case Node::Kind::WhileStmt:
+    case Node::Kind::ForStmt:
       // The condition may be false on entry, so a loop never guarantees a
       // return -- not even `while (true)`, which this language cannot prove.
+      return false;
+    case Node::Kind::BreakStmt:
+    case Node::Kind::ContinueStmt:
+      // Neither returns, and neither falls through to what follows it. "Does
+      // this guarantee a return" is asking about the former, so: no.
       return false;
 
     default:

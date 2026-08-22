@@ -1,0 +1,17 @@
+=== exit ===
+1
+=== stdout ===
+=== stderr ===
+tests/golden/inputs/loop_control_errors.of:3:5: error: 'break' outside a loop
+    break;
+    ^~~~~~
+tests/golden/inputs/loop_control_errors.of:4:5: error: 'continue' outside a loop
+    continue;
+    ^~~~~~~~~
+tests/golden/inputs/loop_control_errors.of:5:21: error: condition of 'for' must have type 'bool', but has type 'int'
+    for (int i = 0; i; i = i + 1) { }
+                    ^
+tests/golden/inputs/loop_control_errors.of:5:21: note: there is no implicit conversion to 'bool'; write an explicit comparison such as '!= 0'
+    for (int i = 0; i; i = i + 1) { }
+                    ^
+3 errors generated.

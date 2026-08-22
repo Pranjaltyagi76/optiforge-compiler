@@ -366,6 +366,23 @@ StmtPtr Parser::parseStatement() {
   if (check(TokenKind::KwWhile)) {
     return parseWhileStmt();
   }
+  if (check(TokenKind::KwFor)) {
+    return parseForStmt();
+  }
+  if (check(TokenKind::KwBreak) || check(TokenKind::KwContinue)) {
+    const bool isBreak = check(TokenKind::KwBreak);
+    const SourceLocation begin = peek().loc;
+    advance();
+    const Token* semi = expectSemicolon(isBreak ? "after 'break'" : "after 'continue'");
+    if (semi == nullptr) {
+      return nullptr;
+    }
+    const SourceRange range = spanning(begin, semi->endLoc());
+    if (isBreak) {
+      return std::make_unique<BreakStmt>(range);
+    }
+    return std::make_unique<ContinueStmt>(range);
+  }
   if (check(TokenKind::KwReturn)) {
     return parseReturnStmt();
   }
@@ -472,6 +489,98 @@ StmtPtr Parser::parseIfStmt() {
       elseBranch != nullptr ? elseBranch->range().end : thenBlock->range().end;
   return std::make_unique<IfStmt>(std::move(cond), std::move(thenBlock), std::move(elseBranch),
                                   spanning(begin, end));
+}
+
+/// One clause of a `for` header: a declaration, an assignment, or nothing.
+///
+/// Reuses `parseVarDecl` and `parseAssignOrExprStmt`, which consume their own
+/// semicolon -- so the init clause's `;` is theirs, and the step clause, which
+/// has no trailing `;`, is parsed here instead of borrowing them.
+StmtPtr Parser::parseForClause(bool isInit) {
+  if (isInit) {
+    if (isTypeKeyword(peek().kind)) {
+      return parseVarDecl();  // consumes the ';'
+    }
+    if (check(TokenKind::Semicolon)) {
+      advance();
+      return nullptr;
+    }
+    return parseAssignOrExprStmt();  // consumes the ';'
+  }
+
+  // The step clause is followed by ')', not ';', so it cannot use the helpers
+  // above. Only an assignment is allowed, which is the only useful thing to
+  // write there in a language without ++ or compound assignment.
+  if (check(TokenKind::RParen)) {
+    return nullptr;
+  }
+  const SourceLocation begin = peek().loc;
+  const Token* name = expect(TokenKind::Identifier, "in the 'for' step clause");
+  if (name == nullptr) {
+    return nullptr;
+  }
+  const SourceRange nameRange = name->range();
+
+  ExprPtr index;
+  if (match(TokenKind::LBracket)) {
+    index = parseExpression();
+    if (index == nullptr || expect(TokenKind::RBracket, "after an array index") == nullptr) {
+      return nullptr;
+    }
+  }
+  if (expect(TokenKind::Assign, "in the 'for' step clause") == nullptr) {
+    return nullptr;
+  }
+  ExprPtr value = parseExpression();
+  if (value == nullptr) {
+    return nullptr;
+  }
+  return std::make_unique<AssignStmt>(std::string(name->lexeme), nameRange,
+                                      std::move(value),
+                                      spanning(begin, value->range().end),
+                                      std::move(index));
+}
+
+StmtPtr Parser::parseForStmt() {
+  const SourceLocation begin = peek().loc;
+  advance();  // 'for'
+
+  if (expect(TokenKind::LParen, "after 'for'") == nullptr) {
+    return nullptr;
+  }
+
+  StmtPtr init = parseForClause(/*isInit=*/true);
+  if (init == nullptr && !previous().is(TokenKind::Semicolon)) {
+    return nullptr;  // the clause failed rather than being empty
+  }
+
+  ExprPtr cond;
+  if (!check(TokenKind::Semicolon)) {
+    cond = parseExpression();
+    if (cond == nullptr) {
+      return nullptr;
+    }
+  }
+  if (expect(TokenKind::Semicolon, "after the 'for' condition") == nullptr) {
+    return nullptr;
+  }
+
+  StmtPtr step = parseForClause(/*isInit=*/false);
+  if (step == nullptr && !check(TokenKind::RParen)) {
+    return nullptr;
+  }
+  if (expect(TokenKind::RParen, "after the 'for' clauses") == nullptr) {
+    return nullptr;
+  }
+
+  BlockPtr body = parseBlock();
+  if (body == nullptr) {
+    return nullptr;
+  }
+
+  const SourceLocation end = body->range().end;
+  return std::make_unique<ForStmt>(std::move(init), std::move(cond), std::move(step),
+                                   std::move(body), spanning(begin, end));
 }
 
 StmtPtr Parser::parseWhileStmt() {

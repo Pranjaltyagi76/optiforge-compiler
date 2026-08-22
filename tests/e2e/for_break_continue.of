@@ -1,0 +1,103 @@
+// `for`, `break` and `continue` (Phase 13).
+//
+// The second case is the important one. `continue` inside a `for` must run the
+// step clause before re-testing the condition. If it jumped straight to the
+// condition the loop would never advance, and this test would hang rather than
+// print a wrong answer -- which is why `for` is lowered separately from `while`
+// instead of being desugared into one.
+//
+// EXPECT-OUTPUT: 18
+// EXPECT-OUTPUT: 5
+// EXPECT-OUTPUT: 8
+// EXPECT-OUTPUT: 6
+// EXPECT-OUTPUT: 16
+// EXPECT-OUTPUT: 45
+// EXPECT-OUTPUT: 30
+// EXPECT-OUTPUT: 6
+
+// Every clause omitted except the condition, and no declaration in the header.
+fn omitted() -> int {
+    int i = 0;
+    int s = 0;
+    for (; i < 10;) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+// `for` over an array, with a `break` out of the middle of it.
+fn overArray() -> int {
+    int a[10];
+    for (int i = 0; i < 10; i = i + 1) {
+        a[i] = i * 2;
+    }
+    int total = 0;
+    for (int i = 0; i < 10; i = i + 1) {
+        if (a[i] > 10) { break; }
+        total = total + a[i];
+    }
+    return total;
+}
+
+// Two loops in a row both declaring `i`: the header gets its own scope, so
+// neither redeclares the other and neither leaks `i` into the function.
+fn twoLoops() -> int {
+    int s = 0;
+    for (int i = 0; i < 3; i = i + 1) { s = s + i; }
+    for (int i = 0; i < 3; i = i + 1) { s = s + i; }
+    return s;
+}
+
+fn main() -> int {
+    int total = 0;
+    for (int i = 0; i < 10; i = i + 1) {
+        if (i == 3) { continue; }
+        if (i == 7) { break; }
+        total = total + i;
+    }
+    print_int(total);
+
+    // `continue` must run the step, or this never terminates.
+    int guard = 0;
+    for (int j = 0; j < 5; j = j + 1) {
+        guard = guard + 1;
+        continue;
+    }
+    print_int(guard);
+
+    // Nested: `break` leaves only the inner loop.
+    int pairs = 0;
+    for (int a = 0; a < 4; a = a + 1) {
+        for (int b = 0; b < 4; b = b + 1) {
+            if (b == 2) { break; }
+            pairs = pairs + 1;
+        }
+    }
+    print_int(pairs);
+
+    // `for (;;)` -- an omitted condition is true, so `break` is the only exit.
+    int n = 0;
+    for (;;) {
+        n = n + 1;
+        if (n > 5) { break; }
+    }
+    print_int(n);
+
+    // `break` and `continue` in a `while`, where continue targets the condition
+    // rather than a step clause.
+    int w = 0;
+    int acc = 0;
+    while (w < 10) {
+        w = w + 1;
+        if (w % 2 == 0) { continue; }
+        if (w > 7) { break; }
+        acc = acc + w;
+    }
+    print_int(acc);
+
+    print_int(omitted());
+    print_int(overArray());
+    print_int(twoLoops());
+    return 0;
+}

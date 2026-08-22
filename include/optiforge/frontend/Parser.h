@@ -63,6 +63,10 @@ private:
   StmtPtr parseVarDecl();
   StmtPtr parseIfStmt();
   StmtPtr parseWhileStmt();
+  StmtPtr parseForStmt();
+  /// The init and step clauses of a `for`, which are statements without
+  /// their own semicolon -- the `for` header owns the punctuation.
+  StmtPtr parseForClause(bool isInit);
   StmtPtr parseReturnStmt();
   StmtPtr parseAssignOrExprStmt();
 

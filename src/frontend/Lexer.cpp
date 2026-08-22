@@ -46,6 +46,9 @@ TokenKind keywordKind(std::string_view text) {
   if (text == "if") return TokenKind::KwIf;
   if (text == "else") return TokenKind::KwElse;
   if (text == "while") return TokenKind::KwWhile;
+  if (text == "for") return TokenKind::KwFor;
+  if (text == "break") return TokenKind::KwBreak;
+  if (text == "continue") return TokenKind::KwContinue;
   if (text == "return") return TokenKind::KwReturn;
   if (text == "true") return TokenKind::KwTrue;
   if (text == "false") return TokenKind::KwFalse;

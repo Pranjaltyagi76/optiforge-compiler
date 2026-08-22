@@ -56,6 +56,9 @@ public:
     ExprStmt,
     IfStmt,
     WhileStmt,
+    ForStmt,
+    BreakStmt,
+    ContinueStmt,
     ReturnStmt,
     // Expressions
     BinaryExpr,
@@ -357,6 +360,54 @@ public:
 private:
   ExprPtr cond_;
   BlockPtr body_;
+};
+
+/// `for (init; cond; step) { ... }`
+///
+/// A real node rather than sugar for `while`. The obvious desugaring --
+/// `{ init; while (cond) { body; step; } }` -- gets `continue` wrong: continue
+/// must run the step and then re-test, and in the desugared form it would jump
+/// straight to the test and skip the step, turning `for (i=0; i<n; i=i+1)` into
+/// an infinite loop the moment anyone writes `continue` in it.
+///
+/// Every part is optional. `for (;;)` is a legal infinite loop.
+class ForStmt final : public Stmt {
+public:
+  ForStmt(StmtPtr init, ExprPtr cond, StmtPtr step, BlockPtr body, SourceRange range)
+      : Stmt(Kind::ForStmt, range),
+        init_(std::move(init)),
+        cond_(std::move(cond)),
+        step_(std::move(step)),
+        body_(std::move(body)) {}
+
+  /// Null when the clause was left empty.
+  const Stmt* init() const { return init_.get(); }
+  const Expr* cond() const { return cond_.get(); }
+  const Stmt* step() const { return step_.get(); }
+  const Block* body() const { return body_.get(); }
+  Stmt* init() { return init_.get(); }
+  Expr* cond() { return cond_.get(); }
+  Stmt* step() { return step_.get(); }
+  Block* body() { return body_.get(); }
+
+private:
+  StmtPtr init_;
+  ExprPtr cond_;
+  StmtPtr step_;
+  BlockPtr body_;
+};
+
+/// `break;` -- leave the innermost enclosing loop.
+class BreakStmt final : public Stmt {
+public:
+  explicit BreakStmt(SourceRange range) : Stmt(Kind::BreakStmt, range) {}
+};
+
+/// `continue;` -- start the innermost enclosing loop's next iteration, running
+/// a `for`'s step clause on the way.
+class ContinueStmt final : public Stmt {
+public:
+  explicit ContinueStmt(SourceRange range) : Stmt(Kind::ContinueStmt, range) {}
 };
 
 class ReturnStmt final : public Stmt {

@@ -567,7 +567,15 @@ each is marked with what it actually cost.
       - Unblocked `bench/programs/matmul.of` and `bench/programs/sieve.of`, the
         two benchmark shapes `methodology.md` §2 asks for that Phase 12 had to
         record as impossible.
-- [ ] `for`, `break`, `continue`.
+- [x] **`for`, `break`, `continue`.** `for` is a real AST node with its own
+      lowering rather than sugar for `while`, and that is the whole point: the
+      obvious desugaring, `{ init; while (cond) { body; step; } }`, makes
+      `continue` skip the step clause, so `for (i = 0; i < n; i = i + 1)` with a
+      `continue` in it would never advance -- a bug that hangs rather than
+      prints a wrong answer. The step gets a basic block of its own and that is
+      where `continue` branches to. The `for` header also gets its own scope, so
+      two loops in a row may both declare `i` and neither leaks it.
+      `break`/`continue` outside any loop is a semantic error.
 - [ ] Strings, structs, pointers.
 
 #### Optimization

@@ -152,6 +152,9 @@ not renumber the blocks of any other.
 | `a < b` | `icmp lt` / `fcmp lt` |
 | `f(a)` | `%t = call <type> @f(...)` |
 | `if` / `while` | blocks plus `br` / `condbr` |
+| `for` | `for.cond`, `for.body`, `for.step`, `for.end`; the body branches to `for.step` and the step to `for.cond` |
+| `break` | `br` to the innermost `*.end` |
+| `continue` | `br` to `for.step` in a `for`, `while.cond` in a `while` — **not** the same block, which is why `for` is lowered separately |
 | `a && b`, `a \|\| b` | branch plus a stack slot for the result |
 
 ### Two invariants worth stating

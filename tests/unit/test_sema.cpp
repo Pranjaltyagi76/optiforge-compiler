@@ -667,3 +667,72 @@ TEST("indexing an undeclared name reports the name, not the index") {
   CHECK(!r->ok);
   CHECK(r->says("undeclared variable 'nosuch'"));
 }
+
+// ---------------------------------------------------------------------------
+// for / break / continue (Phase 13)
+// ---------------------------------------------------------------------------
+
+TEST("a for loop analyzes its three clauses and its body") {
+  auto r = analyze("fn f() -> void { int s = 0; "
+                   "for (int i = 0; i < 3; i = i + 1) { s = s + i; } }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+  CHECK(r->tree().find("ForStmt") != std::string::npos);
+}
+
+TEST("a for header has its own scope") {
+  // Two loops in a row may both declare `i`, and neither leaks it out.
+  auto r = analyze("fn f() -> void { "
+                   "for (int i = 0; i < 3; i = i + 1) { } "
+                   "for (int i = 0; i < 3; i = i + 1) { } }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+
+  auto leaked = analyze("fn f() -> int { for (int i = 0; i < 3; i = i + 1) { } return i; }");
+  CHECK(!leaked->ok);
+  CHECK(leaked->says("undeclared variable 'i'"));
+}
+
+TEST("every for clause may be omitted") {
+  auto r = analyze("fn f() -> void { int i = 0; for (;;) { i = i + 1; break; } }");
+  CHECK(r->ok);
+  CHECK_EQ(r->errors, 0u);
+}
+
+TEST("a for condition must be bool, as an if's must") {
+  auto r = analyze("fn f() -> void { for (int i = 0; i; i = i + 1) { } }");
+  CHECK(!r->ok);
+  CHECK(r->says("condition of 'for' must have type 'bool'"));
+}
+
+TEST("break and continue are accepted inside any loop") {
+  CHECK(analyze("fn f() -> void { while (true) { break; } }")->ok);
+  CHECK(analyze("fn f() -> void { while (true) { continue; } }")->ok);
+  CHECK(analyze("fn f() -> void { for (;;) { break; } }")->ok);
+  CHECK(analyze("fn f() -> void { for (;;) { continue; } }")->ok);
+  // Nested inside an if inside a loop still counts as inside the loop.
+  CHECK(analyze("fn f() -> void { while (true) { if (true) { break; } } }")->ok);
+}
+
+TEST("break and continue outside a loop are rejected") {
+  auto b = analyze("fn f() -> void { break; }");
+  CHECK(!b->ok);
+  CHECK(b->says("'break' outside a loop"));
+
+  auto c = analyze("fn f() -> void { continue; }");
+  CHECK(!c->ok);
+  CHECK(c->says("'continue' outside a loop"));
+
+  // Inside an if, but the if is not inside a loop.
+  auto inIf = analyze("fn f() -> void { if (true) { break; } }");
+  CHECK(!inIf->ok);
+  CHECK(inIf->says("'break' outside a loop"));
+}
+
+TEST("a loop does not count as guaranteeing a return") {
+  // Unchanged from `while`, and now asserted for `for` too: the condition may
+  // be false on entry, so the loop body may never run.
+  auto r = analyze("fn f() -> int { for (;;) { return 1; } }", false);
+  CHECK(!r->ok);
+  CHECK(r->says("not all control paths in function 'f' return a value"));
+}

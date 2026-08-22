@@ -101,7 +101,7 @@ This document defines **what OptiForge must do**, **what must be delivered**, an
 | LANG-30 | `if (cond) { ... }` and `if (cond) { ... } else { ... }`, arbitrarily nested | M |
 | LANG-31 | `while (cond) { ... }`, arbitrarily nested | M |
 | LANG-32 | Condition expressions must be of type `bool` (no implicit int-to-bool) | M |
-| LANG-33 | `for`, `break`, `continue` | C |
+| LANG-33 | `for`, `break`, `continue` — **delivered in Phase 13**; `continue` in a `for` runs the step clause, see `docs/language.md` §10 | C |
 
 ### 3.5 Functions
 

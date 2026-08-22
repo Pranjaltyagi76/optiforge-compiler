@@ -1,0 +1,7 @@
+// `break` and `continue` need an enclosing loop, and `for` needs a bool.
+fn main() -> int {
+    break;
+    continue;
+    for (int i = 0; i; i = i + 1) { }
+    return 0;
+}

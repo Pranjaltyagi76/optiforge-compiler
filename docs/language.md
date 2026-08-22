@@ -68,13 +68,18 @@ param          = type IDENT ;
 type           = "int" | "float" | "bool" | "void" ;
 
 block          = "{" { statement } "}" ;
-statement      = var_decl | assign_stmt | if_stmt | while_stmt
-               | return_stmt | expr_stmt | block ;
+statement      = var_decl | assign_stmt | if_stmt | while_stmt | for_stmt
+               | break_stmt | continue_stmt | return_stmt | expr_stmt | block ;
 
 var_decl       = type IDENT [ "[" INT_LIT "]" ] [ "=" expression ] ";" ;
 assign_stmt    = IDENT [ "[" expression "]" ] "=" expression ";" ;
 if_stmt        = "if" "(" expression ")" block [ "else" ( block | if_stmt ) ] ;
 while_stmt     = "while" "(" expression ")" block ;
+for_stmt       = "for" "(" [ for_init ] ";" [ expression ] ";" [ for_step ] ")" block ;
+for_init       = var_decl_nosemi | assign_nosemi ;
+for_step       = assign_nosemi ;
+break_stmt     = "break" ";" ;
+continue_stmt  = "continue" ";" ;
 return_stmt    = "return" [ expression ] ";" ;
 expr_stmt      = expression ";" ;
 
@@ -309,14 +314,11 @@ an error and the compiler exits non-zero.
 
 ## 8. Not Supported
 
-Strings, structs, pointers, dynamic allocation, `for`, `break`, `continue`,
-explicit casts, bitwise operators, compound assignment (`+=`),
-increment/decrement (`++`), the ternary operator, global variables, multiple
-source files, and separate compilation.
+Strings, structs, pointers, dynamic allocation, explicit casts, bitwise
+operators, compound assignment (`+=`), increment/decrement (`++`), the ternary
+operator, global variables, multiple source files, and separate compilation.
 
-`for`, `break` and `continue` remain Phase 13 candidates
-(`context/roadmap.md`). Arrays arrived in Phase 13; see §9 for what they do
-and do not do.
+Arrays, `for`, `break` and `continue` all arrived in Phase 13; see §9 and §10.
 
 ---
 
@@ -380,7 +382,51 @@ platform requires; that is handled by the compiler and costs one call.
 
 ---
 
-## 10. Complete Example
+## 10. Loops and Loop Control
+
+`while` has been there since Phase 1. `for`, `break` and `continue` arrived in
+Phase 13.
+
+```of
+for (int i = 0; i < 10; i = i + 1) {
+    if (i == 3) { continue; }   // runs the step, then re-tests
+    if (i == 7) { break; }      // leaves the loop
+    total = total + i;
+}
+
+for (; i < n;) { ... }          // any clause may be omitted
+for (;;) { ... break; ... }     // an omitted condition is true
+```
+
+### The rules
+
+| Rule | Notes |
+|---|---|
+| The init clause is a declaration or an assignment | `for (int i = 0; ...)` or `for (i = 0; ...)` |
+| The step clause is an **assignment only** | There is no `++` or `+=` to write there instead |
+| Any clause may be omitted | An omitted condition means `true` |
+| The header has **its own scope** | `for (int i = ...)` does not leak `i`, and two loops in a row may both use it |
+| `break` and `continue` bind to the **innermost** enclosing loop | There are no labels |
+| `break` or `continue` outside any loop is an error | Caught in semantic analysis |
+
+### `continue` in a `for` runs the step
+
+Worth stating because it is the one place a plausible implementation is wrong.
+`for` is **not** sugar for `while`. The obvious desugaring —
+
+```of
+{ init; while (cond) { body; step; } }
+```
+
+— makes `continue` jump to the condition and skip the step, so
+`for (i = 0; i < n; i = i + 1) { continue; }` would never advance and would hang
+rather than misbehave visibly. The step therefore gets a basic block of its own,
+which is where `continue` branches to; `docs/ir.md` §7 shows the shape, and
+`tests/e2e/for_break_continue.of` is the regression test.
+
+---
+
+## 11. Complete Example
 
 ```of
 // Sums 0..n-1 and prints the result.

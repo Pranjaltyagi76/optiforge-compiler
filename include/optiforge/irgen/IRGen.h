@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -40,6 +42,18 @@ private:
   void lowerAssign(const AssignStmt& assign);
   void lowerIf(const IfStmt& stmt);
   void lowerWhile(const WhileStmt& stmt);
+  void lowerFor(const ForStmt& stmt);
+
+  /// Where `break` and `continue` go, innermost loop last.
+  ///
+  /// `continue` targets differ by loop kind, which is the whole reason `for` is
+  /// not sugar for `while`: a `while` continues to its condition, a `for`
+  /// continues to its step clause and reaches the condition from there.
+  struct LoopTargets {
+    ir::BasicBlock* continueTo = nullptr;
+    ir::BasicBlock* breakTo = nullptr;
+  };
+  std::vector<LoopTargets> loops_;
   void lowerReturn(const ReturnStmt& stmt);
 
   // --- Expressions ---

@@ -1,0 +1,49 @@
+=== exit ===
+0
+=== stdout ===
+Program
+  FunctionDecl 'main' -> int
+    Block
+      VarDeclStmt 'total' : int
+        IntLiteral 0 : int
+      ForStmt
+        init:
+          VarDeclStmt 'i' : int
+            IntLiteral 0 : int
+        cond:
+          BinaryExpr '<' : bool
+            VarRef 'i' : int
+            IntLiteral 6 : int
+        step:
+          AssignStmt 'i'
+            BinaryExpr '+' : int
+              VarRef 'i' : int
+              IntLiteral 1 : int
+        body:
+          Block
+            IfStmt
+              cond:
+                BinaryExpr '==' : bool
+                  VarRef 'i' : int
+                  IntLiteral 2 : int
+              then:
+                Block
+                  ContinueStmt
+            IfStmt
+              cond:
+                BinaryExpr '==' : bool
+                  VarRef 'i' : int
+                  IntLiteral 5 : int
+              then:
+                Block
+                  BreakStmt
+            AssignStmt 'total'
+              BinaryExpr '+' : int
+                VarRef 'total' : int
+                VarRef 'i' : int
+      ExprStmt
+        CallExpr 'print_int' : void
+          VarRef 'total' : int
+      ReturnStmt
+        IntLiteral 0 : int
+=== stderr ===

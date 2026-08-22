@@ -123,6 +123,44 @@ private:
         break;
       }
 
+      case Node::Kind::ForStmt: {
+        const auto* loop = static_cast<const ForStmt*>(stmt);
+        line("ForStmt");
+        ++depth_;
+        if (loop->init() != nullptr) {
+          line("init:");
+          ++depth_;
+          writeStmt(loop->init());
+          --depth_;
+        }
+        if (loop->cond() != nullptr) {
+          line("cond:");
+          ++depth_;
+          writeExpr(loop->cond());
+          --depth_;
+        }
+        if (loop->step() != nullptr) {
+          line("step:");
+          ++depth_;
+          writeStmt(loop->step());
+          --depth_;
+        }
+        line("body:");
+        ++depth_;
+        writeStmt(loop->body());
+        --depth_;
+        --depth_;
+        break;
+      }
+
+      case Node::Kind::BreakStmt:
+        line("BreakStmt");
+        break;
+
+      case Node::Kind::ContinueStmt:
+        line("ContinueStmt");
+        break;
+
       case Node::Kind::ExprStmt: {
         const auto* exprStmt = static_cast<const ExprStmt*>(stmt);
         line("ExprStmt");

@@ -1,0 +1,59 @@
+=== exit ===
+0
+=== stdout ===
+module "tests/golden/inputs/for_loop.of" hash=0x338688650dba7956
+
+fn @print_int(i64 %value) -> void;
+
+fn @print_float(f64 %value) -> void;
+
+fn @print_bool(i1 %value) -> void;
+
+fn @main() -> i64 {
+entry:
+  %total.addr = alloca i64
+  store i64 0, %total.addr
+  %i.addr = alloca i64
+  store i64 0, %i.addr
+  br for.cond.1
+
+for.cond.1:                                     ; preds = entry, for.step.3
+  %t0 = load i64, %i.addr
+  %t1 = icmp lt i64 %t0, 6
+  condbr %t1, for.body.2, for.end.4
+
+for.body.2:                                     ; preds = for.cond.1
+  %t2 = load i64, %i.addr
+  %t3 = icmp eq i64 %t2, 2
+  condbr %t3, if.then.5, if.end.6
+
+for.step.3:                                     ; preds = if.then.5, if.end.8
+  %t9 = load i64, %i.addr
+  %t10 = add i64 %t9, 1
+  store i64 %t10, %i.addr
+  br for.cond.1
+
+for.end.4:                                      ; preds = for.cond.1, if.then.7
+  %t11 = load i64, %total.addr
+  call void @print_int(i64 %t11)
+  ret i64 0
+
+if.then.5:                                      ; preds = for.body.2
+  br for.step.3
+
+if.end.6:                                       ; preds = for.body.2
+  %t4 = load i64, %i.addr
+  %t5 = icmp eq i64 %t4, 5
+  condbr %t5, if.then.7, if.end.8
+
+if.then.7:                                      ; preds = if.end.6
+  br for.end.4
+
+if.end.8:                                       ; preds = if.end.6
+  %t6 = load i64, %total.addr
+  %t7 = load i64, %i.addr
+  %t8 = add i64 %t6, %t7
+  store i64 %t8, %total.addr
+  br for.step.3
+}
+=== stderr ===

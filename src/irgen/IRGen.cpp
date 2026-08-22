@@ -210,6 +210,19 @@ void IRGen::lowerStmt(const Stmt& stmt) {
     case Node::Kind::WhileStmt:
       lowerWhile(static_cast<const WhileStmt&>(stmt));
       break;
+    case Node::Kind::ForStmt:
+      lowerFor(static_cast<const ForStmt&>(stmt));
+      break;
+    case Node::Kind::BreakStmt:
+      if (!loops_.empty()) {
+        builder_->createBr(loops_.back().breakTo);
+      }
+      break;
+    case Node::Kind::ContinueStmt:
+      if (!loops_.empty()) {
+        builder_->createBr(loops_.back().continueTo);
+      }
+      break;
     case Node::Kind::ReturnStmt:
       lowerReturn(static_cast<const ReturnStmt&>(stmt));
       break;
@@ -340,12 +353,68 @@ void IRGen::lowerWhile(const WhileStmt& stmt) {
   builder_->createCondBr(condition, bodyBlock, endBlock);
 
   builder_->setInsertPoint(bodyBlock);
+  loops_.push_back({condBlock, endBlock});
   lowerBlock(*stmt.body());
+  loops_.pop_back();
   if (!builder_->atTerminatedBlock()) {
     // The back edge. Loop detection in Phase 5 finds loops precisely by looking
     // for this edge, so its shape matters well beyond Phase 3.
     builder_->createBr(condBlock);
   }
+
+  builder_->setInsertPoint(endBlock);
+}
+
+/// `for (init; cond; step) body`
+///
+///     init
+///     for.cond:  test -> for.body | for.end
+///     for.body:  ...            -> for.step
+///     for.step:  step           -> for.cond
+///     for.end:
+///
+/// The step gets a block of its own even when the body falls straight into it,
+/// because that block is where `continue` goes. Fold it into the body and
+/// `continue` would have to skip the step, which is the bug that makes `for`
+/// worth lowering separately from `while`.
+void IRGen::lowerFor(const ForStmt& stmt) {
+  if (stmt.init() != nullptr) {
+    lowerStmt(*stmt.init());
+  }
+
+  ir::BasicBlock* condBlock = currentFunction_->createBlock("for.cond");
+  ir::BasicBlock* bodyBlock = currentFunction_->createBlock("for.body");
+  ir::BasicBlock* stepBlock = currentFunction_->createBlock("for.step");
+  ir::BasicBlock* endBlock = currentFunction_->createBlock("for.end");
+
+  builder_->createBr(condBlock);
+
+  builder_->setInsertPoint(condBlock);
+  if (stmt.cond() != nullptr) {
+    ir::Value* condition = lowerExpr(*stmt.cond());
+    if (condition == nullptr) {
+      return;
+    }
+    builder_->createCondBr(condition, bodyBlock, endBlock);
+  } else {
+    // `for (;;)` -- an omitted condition is true, so the only way out is a
+    // `break` or a `return`.
+    builder_->createBr(bodyBlock);
+  }
+
+  builder_->setInsertPoint(bodyBlock);
+  loops_.push_back({stepBlock, endBlock});
+  lowerBlock(*stmt.body());
+  loops_.pop_back();
+  if (!builder_->atTerminatedBlock()) {
+    builder_->createBr(stepBlock);
+  }
+
+  builder_->setInsertPoint(stepBlock);
+  if (stmt.step() != nullptr) {
+    lowerStmt(*stmt.step());
+  }
+  builder_->createBr(condBlock);
 
   builder_->setInsertPoint(endBlock);
 }
