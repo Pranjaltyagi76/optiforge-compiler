@@ -171,13 +171,57 @@ class Gen:
             if self.ints:
                 self.emit(f"print_int({r.choice(self.ints)});")
 
+def make_helper(r, index):
+    """One `fn hN(int a, int b) -> int` with a randomly generated body.
+
+    Helpers exist so the **inliner** is fuzzed. Until Phase 13 every generated
+    program was a single `fn main`, so no call was ever emitted and the pass
+    that splices one function into another had no differential coverage at all.
+    That mattered the moment that pass learned to clone *multi-block* bodies,
+    with their branches, their phis and their several returns -- the change most
+    able to miscompile a shape nobody wrote a test for.
+
+    Bodies come from the same statement generator as `main`, so a helper can
+    contain ifs, loops and early returns, and is frequently multi-block.
+    """
+    # Small, and deliberately so, for two reasons that point the same way: the
+    # inliner refuses a callee over its size budget, so a large helper would
+    # never be inlined and would fuzz nothing; and a helper containing a loop,
+    # called from inside one of main's loops, makes the -O0 reference build
+    # exceed the runner's timeout and the whole program gets skipped. A budget
+    # of 1 permits ifs -- which is what makes a callee multi-block -- without
+    # permitting nested loops.
+    g = Gen(r)
+    g.ints.extend(["a", "b"])
+    for _ in range(r.randint(1, 3)):
+        g.stmt(1)
+    # An early return about half the time, so callees with more than one return
+    # -- the case needing a merge phi at the call site -- actually occur.
+    if r.random() < 0.5 and g.ints:
+        g.emit(f"if ({r.choice(g.ints)} > {r.randint(0, 4)}) "
+               f"{{ return {r.choice(g.ints)}; }}")
+    tail = r.choice(g.ints) if g.ints else "a"
+    body = "\n".join(g.lines)
+    return f"fn h{index}(int a, int b) -> int {{\n{body}\n    return {tail};\n}}\n\n"
+
+
 def make_program(seed):
     r = random.Random(seed)
+
+    helpers = [make_helper(r, i) for i in range(r.randint(0, 3))]
+
     g = Gen(r)
     g.emit("int seed = %d;" % r.randint(0, 50))
     g.ints.append("seed")
     for _ in range(r.randint(6, 16)):
         g.stmt(2)
+    # Call every helper, so there is something for the inliner to work on.
+    for i in range(len(helpers)):
+        name = g.fresh("c")
+        x = r.choice(g.ints)
+        y = r.choice(g.ints)
+        g.emit(f"int {name} = h{i}({x}, {y});")
+        g.ints.append(name)
     body = "\n".join(g.lines)
     prints = []
     for v in g.ints[:8]:
@@ -186,7 +230,8 @@ def make_program(seed):
         prints.append(f"    print_bool({v});")
     for v in g.floats[:6]:
         prints.append(f"    print_float({v});")
-    return "fn main() -> int {\n" + body + "\n" + "\n".join(prints) + "\n    return 0;\n}\n"
+    return ("".join(helpers) + "fn main() -> int {\n" + body + "\n" +
+            "\n".join(prints) + "\n    return 0;\n}\n")
 
 # Every configuration must agree with -O0. The naive allocator is in the list
 # on purpose: when a configuration diverges, the pair that differs says whether
@@ -223,6 +268,14 @@ def run(src, workdir, level, idx, extra=()):
         # cwd is the scratch directory, not the repo: an instrumented build
         # writes its .prof beside wherever it is run from, and hundreds of them
         # in the working tree is not a thing a test run should leave behind.
+        # A program that times out here is *skipped*, and a skipped program is
+        # one the fuzzer silently did not test -- so the number matters.
+        # Measured: about 12% of generated programs exceed this, and raising it
+        # from 10s to 30s recovered none of them, because the cause is a deeply
+        # nested generated loop running unoptimized and through memory at -O0,
+        # not a program that is merely close to the limit. Waiting longer is the
+        # wrong fix; bounding the generator's loop nesting is the right one, and
+        # it is not done yet.
         p = subprocess.run([str(exe)], capture_output=True, text=True, timeout=10,
                            cwd=str(workdir))
     except subprocess.TimeoutExpired:

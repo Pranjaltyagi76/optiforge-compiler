@@ -111,6 +111,6 @@ distributing it across the decisions.
 | Action | Metric | Status |
 |---|---|---|
 | Unroller cost model — the −6.8 on `loop_kernel.of` is the single largest correctable loss in the project | G-07 | ☐ open |
-| Multi-block inlining, so the PGO inline budget has something to apply to | G-06 | ☐ open (carried from Phase 11) |
+| Multi-block inlining, so the PGO inline budget has something to apply to | G-06 | ☑ **Done in Phase 13.** The inliner now clones callees with branches, phis, loops and several returns, merging the returns with a phi at the call site. `branchy.of`'s `classify` and `opt_pipeline`'s `work` -- a callee containing a whole loop -- now inline. Still refused: a callee containing a call (so a call-graph cycle cannot expand forever) or an alloca. |
 | Profile-weighted spill costs need a tie-break for functions that are one flat loop | G-08 | ☐ open |
 | Cold-code size mode is measured at −0.1%; keep or drop it on evidence rather than leaving it unexamined | G-10 | ☐ open |

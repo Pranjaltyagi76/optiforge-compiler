@@ -9,6 +9,15 @@
 // The loop has to run often enough to be classified hot, or the unroller
 // correctly leaves it alone and this tests nothing -- hence the outer repeat.
 //
+// Phase 13 note: `triangle` used to survive to the profile and this test used
+// to assert `EXPECT-PROF: FUNCTION triangle 2007`. Multi-block inlining now
+// folds it into `main` at -O2, so no such function exists and no such record is
+// written. The line was removed rather than repaired: the eight outputs below
+// are what actually tests the unroller's exit boundaries, and they still do --
+// verified after the change that the unroller still fires here, so this is not
+// a test that has quietly stopped testing anything. Function-count records are
+// covered by `call_counts.of` and the `hotpath` fixture.
+//
 // LEVEL: -O2
 // EXPECT-OUTPUT: 0
 // EXPECT-OUTPUT: 0
@@ -18,7 +27,6 @@
 // EXPECT-OUTPUT: 36
 // EXPECT-OUTPUT: 45
 // EXPECT-OUTPUT: 4950
-// EXPECT-PROF: FUNCTION triangle 2007
 fn triangle(int n) -> int {
     int total = 0;
     int i = 0;

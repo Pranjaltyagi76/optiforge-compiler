@@ -417,12 +417,80 @@ TEST("a recursive function is not inlined into itself") {
   CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{1});
 }
 
-TEST("a multi-block callee is left alone") {
+TEST("a multi-block callee is inlined, and its returns are merged") {
+  // Was refused before Phase 13. Two returns means the caller needs a phi to
+  // say which one it got.
   auto r = runPass("inline",
                    "fn g(int n) -> int { if (n > 0) { return 1; } return 2; } "
                    "fn f() -> int { return g(1); }");
   CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{0});
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Phi), std::size_t{1});
+}
+
+TEST("a callee with one return needs no phi") {
+  auto r = runPass("inline",
+                   "fn g(int n) -> int { int t = 0; if (n > 0) { t = 1; } return t; } "
+                   "fn f() -> int { return g(1); }");
+  CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{0});
+}
+
+TEST("a callee containing a loop is inlined") {
+  auto r = runPass("inline",
+                   "fn g(int n) -> int { int s = 0; while (n > 0) { s = s + n; "
+                   "n = n - 1; } return s; } "
+                   "fn f() -> int { return g(4); }");
+  CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{0});
+}
+
+TEST("a callee that still contains a call is refused") {
+  // The guard against a call graph expanding forever: refusing to clone any
+  // call means an inlined body can never reintroduce one.
+  //
+  // `h` is recursive, so it is never inlined into `g`; `g` therefore still
+  // contains a call when `f` is considered, and is refused. Written this way
+  // deliberately -- with a *plain* `h` the pass inlines h into g first and then
+  // the now-call-free g into f, which is correct and desirable, and would have
+  // made this test pass for the wrong reason.
+  auto r = runPass("inline",
+                   "fn h(int n) -> int { if (n < 2) { return n; } return h(n - 1); } "
+                   "fn g(int n) -> int { return h(n) * 2; } "
+                   "fn f() -> int { return g(1); }");
+  CHECK(r->valid());
   CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{1});
+}
+
+TEST("a chain of call-free callees collapses in one pass") {
+  // The flip side, and worth pinning: h into g, then the now-call-free g into
+  // f, all in one run.
+  auto r = runPass("inline",
+                   "fn h(int n) -> int { return n + 1; } "
+                   "fn g(int n) -> int { return h(n) * 2; } "
+                   "fn f() -> int { return g(1); }");
+  CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{0});
+}
+
+TEST("a recursive callee is refused") {
+  auto r = runPass("inline",
+                   "fn g(int n) -> int { if (n < 2) { return n; } return g(n - 1); } "
+                   "fn f() -> int { return g(5); }");
+  CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("g"), ir::Opcode::Call), std::size_t{1});
+}
+
+TEST("inlining into a caller that branches afterwards keeps its phis valid") {
+  // The call site's block is split, so everything the block used to branch to
+  // is now reached from the continuation. A phi naming the old block would be
+  // reading an edge that no longer exists.
+  auto r = runPass("inline",
+                   "fn g(int n) -> int { if (n > 0) { return 1; } return 2; } "
+                   "fn f(int c) -> int { int x = g(c); if (c > 1) { x = x + 1; } "
+                   "return x; }");
+  CHECK(r->valid());
+  CHECK_EQ(opcodeCount(r->requireFunction("f"), ir::Opcode::Call), std::size_t{0});
 }
 
 TEST("a runtime builtin has no body and is not inlined") {

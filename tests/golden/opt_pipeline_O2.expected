@@ -9,31 +9,25 @@ fn @print_float(f64 %value) -> void;
 
 fn @print_bool(i1 %value) -> void;
 
-fn @work(i64 %n) -> i64 {
-entry:
-  br while.cond.1
-
-while.cond.1:                                   ; preds = entry, while.body.2
-  %t23 = phi i64 [ 0, entry ], [ %t10, while.body.2 ]
-  %t21 = phi i64 [ %n, entry ], [ %t17, while.body.2 ]
-  %t1 = icmp gt i64 %t21, 0
-  condbr %t1, while.body.2, while.end.3
-
-while.body.2:                                   ; preds = while.cond.1
-  %t6 = add i64 %t23, 80
-  %t9 = shl i64 %t21, 3
-  %t10 = add i64 %t6, %t9
-  %t17 = sub i64 %t21, 1
-  br while.cond.1
-
-while.end.3:                                    ; preds = while.cond.1
-  ret i64 %t23
-}
-
 fn @main() -> i64 {
 entry:
-  %t0 = call i64 @work(i64 3)
-  call void @print_int(i64 %t0)
+  br inline.while.cond.1.3
+
+inline.while.cond.1.3:                          ; preds = entry, inline.while.body.2.4
+  %t1 = phi i64 [ 0, entry ], [ %t6, inline.while.body.2.4 ]
+  %t2 = phi i64 [ 3, entry ], [ %t7, inline.while.body.2.4 ]
+  %t3 = icmp gt i64 %t2, 0
+  condbr %t3, inline.while.body.2.4, inline.while.end.3.5
+
+inline.while.body.2.4:                          ; preds = inline.while.cond.1.3
+  %t4 = add i64 %t1, 80
+  %t5 = shl i64 %t2, 3
+  %t6 = add i64 %t4, %t5
+  %t7 = sub i64 %t2, 1
+  br inline.while.cond.1.3
+
+inline.while.end.3.5:                           ; preds = inline.while.cond.1.3
+  call void @print_int(i64 %t1)
   ret i64 0
 }
 === stderr ===

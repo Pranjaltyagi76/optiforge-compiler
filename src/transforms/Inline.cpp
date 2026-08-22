@@ -132,82 +132,200 @@ private:
     if (callee == &caller) {
       return false;  // recursion would not terminate
     }
-    if (callee->blocks().size() != 1) {
-      return false;  // see the class comment
-    }
-
-    const ir::BasicBlock& body = *callee->blocks().front();
-    if (body.instructions().empty()) {
-      return false;
-    }
-    const ir::Instruction* terminator = body.terminator();
-    if (terminator == nullptr || terminator->opcode() != ir::Opcode::Ret) {
-      return false;
-    }
-    if (body.instructions().size() > budget) {
+    if (callee->blocks().empty()) {
       return false;
     }
 
-    // Anything with its own storage or further calls is left alone: cloning
-    // those correctly needs the general machinery this pass avoids.
-    for (const auto& instruction : body.instructions()) {
-      switch (instruction->opcode()) {
-        case ir::Opcode::Alloca:
-        case ir::Opcode::Call:
-        case ir::Opcode::Load:
-        case ir::Opcode::Store:
-        case ir::Opcode::Phi:
+    // Size is the whole callee now, not one block (Phase 13).
+    std::size_t size = 0;
+    for (const auto& block : callee->blocks()) {
+      size += block->instructions().size();
+      if (block->terminator() == nullptr) {
+        return false;  // malformed; leave it for the verifier to complain about
+      }
+    }
+    if (size > budget) {
+      return false;
+    }
+
+    // Two things are still refused, and for different reasons.
+    //
+    //   `call`  -- so a cycle in the call graph cannot expand forever. The
+    //              `callee == &caller` check above only catches direct
+    //              recursion; refusing to clone calls at all means an inlined
+    //              body can never reintroduce one.
+    //   `alloca`-- the verifier requires every alloca in the entry block, so
+    //              cloning one means hoisting it into the caller's entry and
+    //              reasoning about how many times it is now live. After
+    //              mem2reg a small callee has none anyway.
+    //
+    // Everything else -- loads, stores, geps, phis, branches -- is cloneable,
+    // which is what makes a multi-block callee reachable at all.
+    for (const auto& block : callee->blocks()) {
+      for (const auto& instruction : block->instructions()) {
+        if (instruction->opcode() == ir::Opcode::Alloca ||
+            instruction->opcode() == ir::Opcode::Call) {
           return false;
-        default:
-          break;
+        }
       }
     }
     return true;
   }
 
-  /// Clones the callee's instructions in front of the call, substituting
-  /// arguments for parameters, then replaces the call with the returned value.
+  /// Splices the callee's body into the caller at the call site.
+  ///
+  /// A single-block callee could be spliced straight in, which is all this did
+  /// before Phase 13. A multi-block one cannot: control has to leave the
+  /// caller's block, run the clone, and come back. So the caller's block is
+  /// split around the call and the clone is stitched between the halves:
+  ///
+  ///     before:                     after:
+  ///       B: ...                      B:        ...;  br entry'
+  ///          %r = call @f(x)          entry':   (clone of @f, x substituted)
+  ///          ...rest...                 ...:    br cont
+  ///                                   cont:     %r = phi [ ... ]
+  ///                                             ...rest...
+  ///
+  /// Each `ret` in the clone becomes a branch to `cont`, and the values they
+  /// returned are merged by a phi there. One return needs no phi, which is the
+  /// common case and is worth not paying for.
   static void inlineCall(ir::Instruction& call) {
     const ir::Function& callee = *call.callee();
     ir::BasicBlock& target = *call.parent();
     ir::Function& caller = *target.parent();
 
-    // Parameters map to the actual arguments; every cloned instruction maps to
-    // its clone.
+    // --- Split the caller's block after the call ---
+    ir::BasicBlock* cont = caller.createBlock("inline.cont");
+    cont->executionCount = target.executionCount;
+    {
+      std::vector<ir::Instruction*> trailing;
+      bool seen = false;
+      for (const auto& instruction : target.instructions()) {
+        if (instruction.get() == &call) {
+          seen = true;
+          continue;
+        }
+        if (seen) {
+          trailing.push_back(instruction.get());
+        }
+      }
+      for (ir::Instruction* instruction : trailing) {
+        instruction->moveBefore(*cont, nullptr);
+      }
+
+      // The terminator moved with them, so everything the block used to branch
+      // to is now reached from `cont`. Any phi there still names the old block
+      // as the edge it arrives on, and a phi whose incoming block is not a
+      // predecessor is invalid IR -- and worse, silently reads the wrong value
+      // if the verifier is not looking.
+      const ir::Instruction* terminator = cont->terminator();
+      if (terminator != nullptr) {
+        for (ir::BasicBlock* successor : terminator->successors()) {
+          for (const auto& phi : successor->instructions()) {
+            if (phi->opcode() != ir::Opcode::Phi) {
+              break;  // phis are only ever at the top of a block
+            }
+            for (std::size_t i = 0; i < phi->incomingCount(); ++i) {
+              if (phi->incomingBlock(i) == &target) {
+                phi->setSuccessor(i, cont);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // --- Clone the blocks, before any instruction, so branches can resolve ---
+    std::unordered_map<const ir::BasicBlock*, ir::BasicBlock*> blockMap;
+    for (const auto& block : callee.blocks()) {
+      ir::BasicBlock* clone = caller.createBlock("inline." + block->label());
+      clone->executionCount = target.executionCount;
+      blockMap.emplace(block.get(), clone);
+    }
+
+    // Parameters map to the actual arguments.
     std::unordered_map<const ir::Value*, ir::Value*> mapping;
     for (std::size_t i = 0; i < callee.arguments().size() && i < call.operandCount();
          ++i) {
       mapping.emplace(callee.arguments()[i].get(), call.operand(i));
     }
 
-    ir::Value* returned = nullptr;
+    // --- Clone the instructions ---
+    //
+    // Operands are translated again in a second pass rather than here, because
+    // a block may use a value defined by a block cloned after it -- which is
+    // exactly what a loop in the callee looks like.
+    std::vector<std::pair<ir::Value*, ir::BasicBlock*>> returns;
+    std::vector<std::pair<const ir::Instruction*, ir::Instruction*>> cloned;
 
-    for (const auto& original : callee.blocks().front()->instructions()) {
-      if (original->opcode() == ir::Opcode::Ret) {
-        if (original->operandCount() == 1) {
-          returned = translate(mapping, original->operand(0));
+    for (const auto& block : callee.blocks()) {
+      ir::BasicBlock* into = blockMap[block.get()];
+      for (const auto& original : block->instructions()) {
+        if (original->opcode() == ir::Opcode::Ret) {
+          returns.emplace_back(
+              original->operandCount() == 1 ? original->operand(0) : nullptr, into);
+          auto branch =
+              std::make_unique<ir::Instruction>(ir::Opcode::Br, ir::Type::getVoid());
+          branch->addSuccessor(cont);
+          into->append(std::move(branch));
+          continue;
         }
-        break;
-      }
 
-      auto clone =
-          std::make_unique<ir::Instruction>(original->opcode(), original->type());
-      clone->setPredicate(original->predicate());
-      if (original->hasResult()) {
-        clone->setName(caller.nextTempName());
+        auto clone =
+            std::make_unique<ir::Instruction>(original->opcode(), original->type());
+        clone->setPredicate(original->predicate());
+        clone->setCallee(original->callee());
+        clone->setAllocatedType(original->allocatedType());
+        clone->setAllocatedCount(original->allocatedCount());
+        if (original->hasResult()) {
+          clone->setName(caller.nextTempName());
+        }
+        for (std::size_t i = 0; i < original->operandCount(); ++i) {
+          clone->addOperand(original->operand(i));  // translated below
+        }
+        for (ir::BasicBlock* successor : original->successors()) {
+          const auto it = blockMap.find(successor);
+          clone->addSuccessor(it == blockMap.end() ? successor : it->second);
+        }
+        ir::Instruction* inserted = into->append(std::move(clone));
+        mapping.emplace(original.get(), inserted);
+        cloned.emplace_back(original.get(), inserted);
       }
-      for (std::size_t i = 0; i < original->operandCount(); ++i) {
-        clone->addOperand(translate(mapping, original->operand(i)));
-      }
-
-      ir::Instruction* inserted = target.insertBefore(std::move(clone), &call);
-      mapping.emplace(original.get(), inserted);
     }
 
-    if (call.hasResult() && returned != nullptr) {
-      call.replaceAllUsesWith(returned);
+    // --- Second pass: point every operand at its clone ---
+    for (const auto& [original, clone] : cloned) {
+      for (std::size_t i = 0; i < clone->operandCount(); ++i) {
+        clone->setOperand(i, translate(mapping, clone->operand(i)));
+      }
+      (void)original;
     }
+
+    // --- Hand the call's result back ---
+    ir::Value* result = nullptr;
+    if (call.hasResult() && !returns.empty()) {
+      if (returns.size() == 1) {
+        result = translate(mapping, returns.front().first);
+      } else {
+        auto merge = std::make_unique<ir::Instruction>(ir::Opcode::Phi, call.type());
+        merge->setName(caller.nextTempName());
+        for (const auto& [value, from] : returns) {
+          merge->addIncoming(translate(mapping, value), from);
+        }
+        result = cont->insertAtTop(std::move(merge));
+      }
+    }
+    if (result != nullptr) {
+      call.replaceAllUsesWith(result);
+    }
+
+    // --- Enter the clone, and drop the call ---
     call.eraseFromParent();
+    auto enter = std::make_unique<ir::Instruction>(ir::Opcode::Br, ir::Type::getVoid());
+    enter->addSuccessor(blockMap[callee.blocks().front().get()]);
+    target.append(std::move(enter));
+
+    caller.recomputePredecessors();
   }
 
   static ir::Value* translate(
