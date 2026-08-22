@@ -301,7 +301,7 @@ points.
 |---|---|---|
 | Give the unroller a cost model that can decline an issue-limited body, rather than a trip-count threshold alone | G-07 | ☐ open — this is what costs `loop_kernel.of` 7% |
 | Reconsider the unroller's minimum trip count: a 3-trip inner loop unrolled by 8 is worth +10.9% (see the portability run) | G-07 | ☐ open |
-| Arrays in the language, so a memory-bound benchmark can exist | Q-01 | ☐ Phase 13 |
+| Arrays in the language, so a memory-bound benchmark can exist | Q-01 | ◧ **Partly done in Phase 13.** Arrays landed and brought `matmul.of` and `sieve.of`. A *memory-bound* benchmark still does not exist: arrays are frame-allocated against a 1 MB stack, and `sieve`'s 400 KB is L2-resident. Needs heap allocation. |
 | Investigate P-05 = 1.73x — the allocator's cost in the presence of unrolling | P-05 | ☐ open |
 | Reconsider profile-weighted spill costs for single-loop functions, where the profile says only that everything is equally hot | G-08 | ☐ open |
 | Multi-block inlining, so PGO inlining has something to do — its attributed contribution is inside the noise on all eight programs | G-06 | ☐ open (carried from Phase 11) |

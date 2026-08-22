@@ -173,7 +173,7 @@ Confirmed against the committed compiler that this predates Phase 11.
 | Action | Metric | Status |
 |---|---|---|
 | Measure a profile applied to a *different* workload than it came from | PGO-14 | ☑ **Done in Phase 12** — [portability run](2026-08-20-pgo-portability.md). A mismatched profile costs 3.7 points against a matched one on `loop_kernel_b.of`. |
-| Benchmarks that are not synthetic, which needs arrays in the language | Q-01 | ☐ Phase 13 |
+| Benchmarks that are not synthetic, which needs arrays in the language | Q-01 | ◧ Arrays landed in Phase 13, and `matmul.of` and `sieve.of` with them. They are still written by the person measuring them, so "not synthetic" is **not** met. |
 | Multi-block inlining, so PGO inlining has something to do | PGO-06 | ☐ open — the budget rule works, but the single-block restriction binds first |
 | True unrolling with a remainder loop, to drop the per-copy test | PGO-07 | ☐ open |
 | Measure whether cold-code size mode moves anything | PGO-10 | ☑ **Done in Phase 12** — [attribution run](2026-08-20-pgo-attribution.md). It moves −0.1%, inside the noise floor, on every program. |
