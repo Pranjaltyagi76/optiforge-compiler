@@ -63,6 +63,23 @@ It is shared by both sides of any comparison, so it cannot create a speedup —
 but it **dilutes every percentage**, always downward. See `methodology.md` §4.
 Benchmarks are sized well above it for this reason.
 
+### The floor is not uniform, and it moves
+
+**1.0% is the floor measured on a quiet machine, and it does not hold for every
+program or every session.** Two later observations, both worth carrying:
+
+- **`loop_kernel.of` reached 12% IQR/median** during the Phase 13 session, from
+  2.8% earlier the same day. At that spread the median of 25 samples carries
+  roughly 3% of standard error, and two **byte-identical** binaries measured
+  5.4 percentage points apart in one attribution run. Differences under about
+  5% on that program are not resolvable when the machine is in that state.
+- The cause is background activity this project does not control: `audiodg`
+  and the Radeon service were both consuming CPU, and the machine idled at 20%.
+
+**What follows.** A per-program floor has to be re-measured in the same session
+as any result it gates, rather than assumed from this file. `--configs O2,O2`
+does exactly that and costs one extra run.
+
 ### Two caveats that belong with the number
 
 **The power plan is Balanced, not High Performance.** `methodology.md` §3.1

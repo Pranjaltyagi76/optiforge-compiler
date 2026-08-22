@@ -2,6 +2,7 @@
 #include <cmath>
 #include <memory>
 #include <ostream>
+#include <map>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -28,6 +29,35 @@ using passes::PassRegistration;
 /// the factor. Past this the instruction cache costs more than the branches
 /// saved (System_design.md §16.2).
 constexpr std::size_t kUnrolledSizeBudget = 400;
+
+/// Loop-carried values above which unrolling is refused, whatever the trip
+/// count says (the Phase 13 cost model).
+///
+/// **Why the carried count and not the body size.** A temporary dies inside the
+/// copy that computes it, so replicating a body does not lengthen its live
+/// range. A *carried* value -- one a header phi brings round -- is live through
+/// every copy, and the exit merge is `carried x factor` wide. So the register
+/// demand unrolling adds scales with how many values the loop carries, and not
+/// with how big it is.
+///
+/// **Where the number comes from.** The only target has eight allocatable
+/// integer registers. A loop carrying more than half of them leaves the body
+/// too few to compute in without spilling, and the spill traffic lands in the
+/// hot loop -- which is the one place it cannot be afforded. Half of eight is
+/// four.
+///
+/// A mid-level pass cannot ask the backend for that eight without inverting the
+/// layering (architectural_design.md section 3, rule 3), so it is a constant
+/// here with its provenance written down, exactly as `kUnrolledSizeBudget` is.
+///
+/// **This was measured, and two other explanations were rejected first.** On the
+/// benchmark corpus, unrolling helps `matmul` (+9%), `sieve` (+8%),
+/// `nested_math` (+4%) and `loop_sum` (+4%), and costs `loop_kernel` 6%. Neither
+/// emitted instruction count nor dependency-chain length predicts which is
+/// which -- `loop_kernel` gets *fewer* instructions per iteration and is slower,
+/// and `matmul` is the most latency-bound of the five and gains the most. The
+/// carried count is the one signal that separates them: 1, 2, 2, 2 against 6.
+constexpr std::size_t kCarriedValueBudget = 4;
 
 /// The shape this unroller handles, and the values it needs from it.
 ///
@@ -178,6 +208,7 @@ std::unique_ptr<ir::Instruction> cloneInstruction(const ir::Instruction& origina
   }
   return clone;
 }
+
 
 std::size_t bodySize(const SimpleLoop& loop) {
   return loop.body->instructions().size() + loop.header->instructions().size();
@@ -447,6 +478,14 @@ public:
       SimpleLoop simple;
       if (!describe(*loop, simple)) {
         remark(function, header, "hot, but its shape is not one this unroller handles");
+        continue;
+      }
+
+      if (simple.phis.size() > kCarriedValueBudget) {
+        remark(function, header,
+               "hot, but it carries " + std::to_string(simple.phis.size()) +
+                   " values across the back edge; unrolling would keep all of them "
+                   "live through every copy");
         continue;
       }
 
