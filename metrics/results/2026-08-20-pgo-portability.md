@@ -130,12 +130,36 @@ path dominates, and the identical layout pass is worth **+16.0%**. Same code,
 same pass, same profile format; the only difference is whether the program's
 behaviour is *concentrated*.
 
-That is the general lesson of this page, and it is worth more than the numbers:
+> ### ⚠ Falsified in Phase 13
+>
+> **The paragraphs above and the "general lesson" below are wrong**, and the
+> −4.7% they are built on was noise.
+>
+> Phase 13 measured metric G-09 directly — the executed fall-through rate,
+> computed from the emitted block order and the profile's own edge counts, with
+> no clock involved (`bench/harness/fallthrough.py`). On this very program:
+>
+> | | fall-through rate |
+> |---|---|
+> | `branch_machine_b`, layout off | 33.3% |
+> | `branch_machine_b`, layout on | **83.3%** |
+>
+> **+50.0 points — the largest layout improvement anywhere in the corpus**,
+> slightly larger than on workload A. Layout does not "commit to the wrong
+> path" here; it gets this program more right than any other. The story below
+> was constructed to explain a timing difference that a noise-free measurement
+> says does not exist.
+>
+> Two things survive: the state machine really does cycle through three states,
+> and a *perfectly accurate profile* really is not sufficient for a speedup. What
+> does not survive is the claimed mechanism and the number attached to it.
 
-> **Profile-guided layout pays in proportion to how concentrated the hot path
+~~That is the general lesson of this page, and it is worth more than the numbers:~~
+
+> ~~**Profile-guided layout pays in proportion to how concentrated the hot path
 > is, not to how accurately the profile was measured.** A perfectly accurate
 > profile of behaviour that is spread evenly across three paths gives the
-> optimizer nothing to exploit, and committing to one of them costs real time.
+> optimizer nothing to exploit, and committing to one of them costs real time.~~
 
 The crossed build's +0.6% is inside the noise floor, so the fair reading is that
 A's profile is *neutral* here rather than better — it happens to produce a layout
@@ -173,5 +197,5 @@ descriptive for that reason. What the three do establish:
 | Action | Metric | Status |
 |---|---|---|
 | Reconsider the unroller's minimum trip count — declining a 3-trip loop costs 10.9% | G-07 | ☑ **Done in Phase 13.** Threshold lowered from 4 to 2 and short counts unrolled by a covering factor; the matched profile now gains +12.5% here. No loop in the ten-program corpus has a trip count in 2..4, so nothing else changed. |
-| Layout could decline to commit when no path dominates, instead of always taking the most frequent | G-09 | ☐ open |
+| ~~Layout could decline to commit when no path dominates~~ | G-09 | ☒ **Withdrawn in Phase 13 — false premise.** Layout raises this program's fall-through rate by 50 points, the largest gain in the corpus. There is nothing to decline. |
 | Repeat G-13 with a variant that changes which functions run, not just their counts | G-13 | ☐ open |

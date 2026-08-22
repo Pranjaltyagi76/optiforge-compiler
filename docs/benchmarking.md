@@ -163,6 +163,7 @@ Kept because each answers one question cheaply, without a full timing session:
 | `count_memops.py` | How much frame traffic does graph colouring remove versus naive? | BE-04, Q-06 |
 | `profile_overhead.py` | How much slower is `--profile`? | I-01 |
 | `pgo_speedup.py` | Does PGO beat `-O2`? (minimum-of-N, the Phase 11 estimator) | PGO-14 |
+| `fallthrough.py` | What share of executed branches fall through, with layout on and off? **No clock involved** | G-09 |
 
 `pgo_speedup.py` and `run.py` deliberately disagree about the estimator:
 `pgo_speedup.py` reports the **minimum** of N runs, `run.py` the **median**, as
