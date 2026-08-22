@@ -223,8 +223,34 @@ std::size_t bodySize(const SimpleLoop& loop) {
 /// at the high one -- getting the factor wrong costs code size, never
 /// correctness, because every copy re-tests the condition.
 unsigned factorFor(double tripCount, std::size_t body) {
-  if (std::isnan(tripCount) || tripCount < 4.0) {
-    return 1;  // too short for the extra code to pay for itself
+  if (std::isnan(tripCount) || tripCount < 2.0) {
+    return 1;  // nothing to replicate
+  }
+
+  // A short trip count is not a reason to refuse a loop that is already known
+  // hot, and treating it as one cost 10.9% on a measured case (the Phase 12
+  // portability run: an inner loop of three iterations, entered eighty million
+  // times, was 10.9% faster unrolled than left alone).
+  //
+  // The old threshold of four encoded the reasoning for a loop entered *once*,
+  // where a short trip count means little total work. That reasoning does not
+  // transfer: the saving is one back edge **per iteration**, so what decides
+  // whether it pays is how often the loop runs in total -- and the profile has
+  // already answered that, because this pass only reaches a loop it has
+  // classified hot.
+  //
+  // For a short trip count the useful factor is the one that covers it, so the
+  // whole loop becomes straight-line with early exits and no back edge is taken
+  // at all. Rounded up to a power of two, and capped like every other factor.
+  if (tripCount < 8.0) {
+    unsigned covering = 2;
+    while (covering < 8 && static_cast<double>(covering) < tripCount) {
+      covering *= 2;
+    }
+    while (covering > 1 && body * covering > kUnrolledSizeBudget) {
+      covering /= 2;
+    }
+    return covering;
   }
 
   unsigned factor = 2;

@@ -88,6 +88,14 @@ inner loops, and it is filed as an action.
 Retention is reported as `n/a` because the matched gain (−0.0%) is inside the
 noise floor: a ratio to a denominator of zero is not a number.
 
+> **Resolved in Phase 13.** The guard was the bug, exactly as this section
+> argued. With the minimum trip count lowered and short counts unrolled by a
+> factor that covers them, the *matched* profile now unrolls this loop by 4 and
+> measures **+12.5%**, against −0.0% above. The crossed profile gets +14.0%, so
+> the two are within noise of each other and the anomaly — a wrong profile
+> beating a right one — is gone. Nothing here needed to be true about stale
+> profiles; the decision rule was simply wrong, and it now is not.
+
 ## 5. `loop_kernel_b`: the wrong profile mis-targets exactly as predicted
 
 ```
@@ -164,6 +172,6 @@ descriptive for that reason. What the three do establish:
 
 | Action | Metric | Status |
 |---|---|---|
-| Reconsider the unroller's minimum trip count — declining a 3-trip loop costs 10.9% | G-07 | ☐ open |
+| Reconsider the unroller's minimum trip count — declining a 3-trip loop costs 10.9% | G-07 | ☑ **Done in Phase 13.** Threshold lowered from 4 to 2 and short counts unrolled by a covering factor; the matched profile now gains +12.5% here. No loop in the ten-program corpus has a trip count in 2..4, so nothing else changed. |
 | Layout could decline to commit when no path dominates, instead of always taking the most frequent | G-09 | ☐ open |
 | Repeat G-13 with a variant that changes which functions run, not just their counts | G-13 | ☐ open |
